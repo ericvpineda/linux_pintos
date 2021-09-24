@@ -100,7 +100,7 @@ static void start_process(void* file_name_) {
 
     // START OF ARG PASSING
     char *token_copy, *save_ptr_copy;
-    char *file_copy[strlen(file_name)];
+    char file_copy[strlen(file_name) + 1];
     strlcpy(file_copy, file_name, strlen(file_name));
 
     int num_tokens;
