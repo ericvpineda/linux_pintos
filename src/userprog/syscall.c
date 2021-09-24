@@ -26,4 +26,12 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     printf("%s: exit(%d)\n", thread_current()->pcb->process_name, args[1]);
     process_exit();
   }
-}
+
+  if (args[0] == SYS_WRITE && args[1] == 1) {
+    putbuf((char*) args[2], args[3]);
+    f->eax = args[3];
+  }
+
+  if (args[0] == SYS_PRACTICE) {
+    f->eax = args[1] + 1;
+  }
