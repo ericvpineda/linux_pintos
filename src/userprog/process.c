@@ -98,6 +98,7 @@ static void start_process(void* file_name_) {
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
 
+    // START OF ARG PASSING
     char *token_copy, *save_ptr_copy;
     char *file_copy[strlen(file_name)];
     strlcpy(file_copy, file_name, strlen(file_name));
@@ -121,7 +122,7 @@ static void start_process(void* file_name_) {
 
       void* temp = if_.esp;
       
-      // copying strings onto stack
+      // copy strings onto stack
       for (int i = 0; i < num_tokens; i++) {
           memcpy(if_.esp, token_list[i], strlen(token_list[i]) + 1);
           if_.esp -= strlen(token_list[i]) + 1;
@@ -136,7 +137,7 @@ static void start_process(void* file_name_) {
       // null pointer sentinel
       memset(if_.esp, 0, 4);
 
-      // copying stack addresses strings onto stack
+      // copy stack addresses strings onto stack
       for (int i = 0; i < num_tokens; i++) {
           memcpy(if_.esp, temp, sizeof(void*));
           temp -= strlen(token_list[i]) + 1;
@@ -156,7 +157,7 @@ static void start_process(void* file_name_) {
       memcpy(if_.esp, 0, sizeof(void (*)()));
       if_.esp -= sizeof(void (*)());
     }
-
+    // END OF ARG PASSING
   }
 
   /* Handle failure with succesful PCB malloc. Must free the PCB */
