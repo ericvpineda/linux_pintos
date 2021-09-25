@@ -108,19 +108,18 @@ static void start_process(void* file_name_) {
       num_tokens++;
     }
 
-    if (num_tokens == 1) {
-      success = load(file_name, &if_.eip, &if_.esp);
-    }
     char *token, *save_ptr;
     char *token_list[num_tokens];
     int i = num_tokens - 1;
     for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
-      strlcat(token, "\0", strlen(token) + 1);
       token_list[i] = (char*) malloc(strlen(token) + 1);
       strlcpy(token_list[i], token, strlen(token) + 1);
+      i--;
     }
 
-    void* temp = if_.esp - strlen(token_list[num_tokens - 1]) - 1;
+    success = load(token_list[num_tokens - 1], &if_.eip, &if_.esp);
+
+    void* temp = if_.esp;
     
     // copy strings onto stack
     for (int i = 0; i < num_tokens; i++) {
@@ -140,10 +139,10 @@ static void start_process(void* file_name_) {
 
     // copy stack addresses strings onto stack
     for (int i = 0; i < num_tokens; i++) {
-        if_.esp -= sizeof(void*);
-        memcpy(if_.esp, &temp, sizeof(void*));
-        temp -= strlen(token_list[i]) + 1;
-        free(token_list[i]);
+      if_.esp -= sizeof(void*);
+      temp -= strlen(token_list[i]) + 1;
+      memcpy(if_.esp, &temp, sizeof(void*));
+      free(token_list[i]);
     }
 
     // copy argv onto stack
