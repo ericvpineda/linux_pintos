@@ -101,7 +101,7 @@ static void start_process(void* file_name_) {
     // START OF ARG PASSING
     char *token_copy, *save_ptr_copy;
     char file_copy[strlen(file_name) + 1];
-    strlcpy(file_copy, file_name, strlen(file_name));
+    strlcpy(file_copy, file_name, strlen(file_name) + 1);
 
     int num_tokens;
     for (token_copy = strtok_r(file_copy, " ", &save_ptr_copy); token_copy != NULL; token_copy = strtok_r (NULL, " ", &save_ptr_copy)) {
@@ -110,53 +110,55 @@ static void start_process(void* file_name_) {
 
     if (num_tokens == 1) {
       success = load(file_name, &if_.eip, &if_.esp);
-    } else {
-      char *token, *save_ptr;
-      char *token_list[num_tokens];
-      int i = num_tokens - 1;
-        for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
-            strlcat(token, "\0", strlen(token) + 1);
-            token_list[i] = (char*) malloc(strlen(token) + 1);
-            strlcpy(token_list[i], token, strlen(token));
-        }
-
-      void* temp = if_.esp;
-      
-      // copy strings onto stack
-      for (int i = 0; i < num_tokens; i++) {
-          memcpy(if_.esp, token_list[i], strlen(token_list[i]) + 1);
-          if_.esp -= strlen(token_list[i]) + 1;
-      }
-
-      // stack align
-      while ((uintptr_t) if_.esp % 16 != 0) {
-          if_.esp--;
-          memset(if_.esp, 0, 1);
-      }
-
-      // null pointer sentinel
-      memset(if_.esp, 0, 4);
-
-      // copy stack addresses strings onto stack
-      for (int i = 0; i < num_tokens; i++) {
-          memcpy(if_.esp, temp, sizeof(void*));
-          temp -= strlen(token_list[i]) + 1;
-          if_.esp -= sizeof(void*);
-          free(token_list[i]);
-      }
-
-      // copy argv onto stack
-      memcpy(if_.esp, if_.esp + 4, sizeof(void*));
-      if_.esp -= sizeof(void*);
-
-      // copy argc onto stack
-      memcpy(if_.esp, num_tokens, sizeof(int));
-      if_.esp -= sizeof(int);
-
-      // copy fake return address onto stack
-      memcpy(if_.esp, 0, sizeof(void (*)()));
-      if_.esp -= sizeof(void (*)());
     }
+    char *token, *save_ptr;
+    char *token_list[num_tokens];
+    int i = num_tokens - 1;
+    for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+      strlcat(token, "\0", strlen(token) + 1);
+      token_list[i] = (char*) malloc(strlen(token) + 1);
+      strlcpy(token_list[i], token, strlen(token) + 1);
+    }
+
+    void* temp = if_.esp - strlen(token_list[num_tokens - 1]) - 1;
+    
+    // copy strings onto stack
+    for (int i = 0; i < num_tokens; i++) {
+      if_.esp -= strlen(token_list[i]) + 1;
+      memcpy(if_.esp, token_list[i], strlen(token_list[i]) + 1);
+    }
+
+    // stack align
+    while ((uintptr_t) if_.esp % 16 != 0) {
+      if_.esp--;
+      memset(if_.esp, 0, 1);
+    }
+
+    // null pointer sentinel
+    if_.esp -= 4;
+    memset(if_.esp, 0, 4);
+
+    // copy stack addresses strings onto stack
+    for (int i = 0; i < num_tokens; i++) {
+        if_.esp -= sizeof(void*);
+        memcpy(if_.esp, &temp, sizeof(void*));
+        temp -= strlen(token_list[i]) + 1;
+        free(token_list[i]);
+    }
+
+    // copy argv onto stack
+    void* argv0_addr = if_.esp;
+    if_.esp -= sizeof(void*);
+    memcpy(if_.esp, &argv0_addr, sizeof(void*));
+
+    // copy argc onto stack
+    if_.esp -= sizeof(int);
+    memcpy(if_.esp, &num_tokens, sizeof(int));
+
+    // copy fake return address onto stack
+    int fake_return = 0;
+    if_.esp -= sizeof(void(*)(void));
+    memcpy(if_.esp, &fake_return, sizeof(void(*)(void)));
     // END OF ARG PASSING
   }
 
@@ -531,7 +533,7 @@ static bool setup_stack(void** esp) {
   if (kpage != NULL) {
     success = install_page(((uint8_t*)PHYS_BASE) - PGSIZE, kpage, true);
     if (success)
-      *esp = PHYS_BASE - 20;
+      *esp = PHYS_BASE;
     else
       palloc_free_page(kpage);
   }
