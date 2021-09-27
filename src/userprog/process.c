@@ -79,6 +79,25 @@ static void start_process(void* file_name_) {
   struct process* new_pcb = malloc(sizeof(struct process));
   success = pcb_success = new_pcb != NULL;
 
+  char *token_copy, *save_ptr_copy;
+  char file_copy[strlen(file_name) + 1];
+  strlcpy(file_copy, file_name, strlen(file_name) + 1);
+
+  int num_tokens = 0;
+  for (token_copy = strtok_r(file_copy, " ", &save_ptr_copy); token_copy != NULL; token_copy = strtok_r (NULL, " ", &save_ptr_copy)) {
+    num_tokens++;
+  }
+
+  char *token, *save_ptr;
+  char *token_list[num_tokens];
+  int i = num_tokens - 1;
+  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+    token_list[i] = (char*) malloc(strlen(token) + 1);
+    strlcpy(token_list[i], token, strlen(token) + 1);
+    i--;
+  }
+  char* process_name = token_list[num_tokens - 1];
+
   /* Initialize process control block */
   if (success) {
     // Ensure that timer_interrupt() -> schedule() -> process_activate()
@@ -88,7 +107,7 @@ static void start_process(void* file_name_) {
 
     // Continue initializing the PCB as normal
     t->pcb->main_thread = t;
-    strlcpy(t->pcb->process_name, t->name, sizeof t->name);
+    strlcpy(t->pcb->process_name, process_name, sizeof t->name);
   }
 
   /* Initialize interrupt frame and load executable. */
@@ -98,26 +117,7 @@ static void start_process(void* file_name_) {
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
 
-    // START OF ARG PASSING
-    char *token_copy, *save_ptr_copy;
-    char file_copy[strlen(file_name) + 1];
-    strlcpy(file_copy, file_name, strlen(file_name) + 1);
-
-    int num_tokens;
-    for (token_copy = strtok_r(file_copy, " ", &save_ptr_copy); token_copy != NULL; token_copy = strtok_r (NULL, " ", &save_ptr_copy)) {
-      num_tokens++;
-    }
-
-    char *token, *save_ptr;
-    char *token_list[num_tokens];
-    int i = num_tokens - 1;
-    for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
-      token_list[i] = (char*) malloc(strlen(token) + 1);
-      strlcpy(token_list[i], token, strlen(token) + 1);
-      i--;
-    }
-
-    success = load(token_list[num_tokens - 1], &if_.eip, &if_.esp);
+    success = load(process_name, &if_.eip, &if_.esp);
 
     void* temp = if_.esp;
     
@@ -158,7 +158,6 @@ static void start_process(void* file_name_) {
     int fake_return = 0;
     if_.esp -= sizeof(void(*)(void));
     memcpy(if_.esp, &fake_return, sizeof(void(*)(void)));
-    // END OF ARG PASSING
   }
 
   /* Handle failure with succesful PCB malloc. Must free the PCB */
