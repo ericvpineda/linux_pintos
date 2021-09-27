@@ -28,7 +28,6 @@ struct process {
   char process_name[16];      /* Name of the main thread */
   struct thread* main_thread; /* Pointer to main thread */
   int exit_code;              /* Exit code */
-
 };
 
 void userprog_init(void);
