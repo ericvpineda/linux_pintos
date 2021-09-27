@@ -78,6 +78,7 @@ static void start_process(void* file_name_) {
   /* Allocate process control block */
   struct process* new_pcb = malloc(sizeof(struct process));
   success = pcb_success = new_pcb != NULL;
+  new_pcb->exit_code = -1;
 
   char *token_copy, *save_ptr_copy;
   char file_copy[strlen(file_name) + 1];
@@ -228,6 +229,8 @@ void process_exit(void) {
     pagedir_destroy(pd);
   }
 
+  printf("%s: exit(%d)\n", thread_current()->pcb->process_name, thread_current()->pcb->exit_code);
+
   /* Free the PCB of this process and kill this thread
      Avoid race where PCB is freed before t->pcb is set to NULL
      If this happens, then an unfortuantely timed timer interrupt
@@ -237,6 +240,7 @@ void process_exit(void) {
   free(pcb_to_free);
 
   sema_up(&temporary);
+  
   thread_exit();
 }
 
