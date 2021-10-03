@@ -83,20 +83,20 @@ static void start_process(void* file_name_) {
   char file_copy[strlen(file_name) + 1];
   strlcpy(file_copy, file_name, strlen(file_name) + 1);
 
-  int num_tokens = 0;
+  int argc = 0;
   for (token_copy = strtok_r(file_copy, " ", &save_ptr_copy); token_copy != NULL; token_copy = strtok_r (NULL, " ", &save_ptr_copy)) {
-    num_tokens++;
+    argc++;
   }
 
   char *token, *save_ptr;
-  char *token_list[num_tokens];
-  int i = num_tokens - 1;
+  char *token_list[argc];
+  int i = argc - 1;
   for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
     token_list[i] = (char*) malloc(strlen(token) + 1);
     strlcpy(token_list[i], token, strlen(token) + 1);
     i--;
   }
-  char* process_name = token_list[num_tokens - 1];
+  char* process_name = token_list[argc - 1];
 
   /* Initialize process control block */
   if (success) {
@@ -122,15 +122,17 @@ static void start_process(void* file_name_) {
     void* temp = if_.esp;
     
     // copy strings onto stack
-    for (int i = 0; i < num_tokens; i++) {
+    for (int i = 0; i < argc; i++) {
       if_.esp -= strlen(token_list[i]) + 1;
       memcpy(if_.esp, token_list[i], strlen(token_list[i]) + 1);
     }
 
     // stack align
-    while ((uintptr_t) if_.esp % 16 != 0) {
+    uintptr_t align = (uintptr_t) if_.esp - (4 * argc) - 16;
+    while (align % 16 != 12) {
       if_.esp--;
       memset(if_.esp, 0, 1);
+      align--;
     }
 
     // null pointer sentinel
@@ -138,7 +140,7 @@ static void start_process(void* file_name_) {
     memset(if_.esp, 0, 4);
 
     // copy stack addresses strings onto stack
-    for (int i = 0; i < num_tokens; i++) {
+    for (int i = 0; i < argc; i++) {
       if_.esp -= sizeof(void*);
       temp -= strlen(token_list[i]) + 1;
       memcpy(if_.esp, &temp, sizeof(void*));
@@ -152,7 +154,7 @@ static void start_process(void* file_name_) {
 
     // copy argc onto stack
     if_.esp -= sizeof(int);
-    memcpy(if_.esp, &num_tokens, sizeof(int));
+    memcpy(if_.esp, &argc, sizeof(int));
 
     // copy fake return address onto stack
     int fake_return = 0;
