@@ -21,6 +21,14 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
   /* printf("System call number: %d\n", args[0]); */
 
+  /* Open syscall */
+  if (args[0] == SYS_OPEN) {
+
+    printf("Opening file..\n");
+    char *input_file = (char *) args[1];
+    printf("File name = %s\n", input_file);
+  }
+
   if (args[0] == SYS_EXIT) {
     f->eax = args[1];
     thread_current()->pcb->exit_code = args[1];
