@@ -27,12 +27,20 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     process_exit();
   }
 
-  if (args[0] == SYS_WRITE && args[1] == 1) {
+  else if (args[0] == SYS_WRITE && args[1] == 1) {
     putbuf((char*) args[2], args[3]);
     f->eax = args[3];
   }
 
-  if (args[0] == SYS_PRACTICE) {
+  else if (args[0] == SYS_PRACTICE) {
     f->eax = args[1] + 1;
+  }
+
+  else if (args[0] == SYS_HALT) {
+    shutdown_power_off();
+  }
+
+  else if (args[0] == SYS_EXEC) {
+    f->eax = process_execute((char*) args[1]);
   }
 }

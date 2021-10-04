@@ -24,6 +24,11 @@ static struct semaphore temporary;
 static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
 
+struct shared_data {
+  void* fn;
+  struct wait_status *wait_info;
+};
+
 /* Initializes user programs in the system by ensuring the main
    thread has a minimal PCB so that it can execute and wait for
    the first user process. Any additions to the PCB should be also
@@ -52,31 +57,48 @@ pid_t process_execute(const char* file_name) {
   char* fn_copy;
   tid_t tid;
 
-  sema_init(&temporary, 0);
+  struct wait_status *process_info = malloc(sizeof(struct wait_status));
+
+  sema_init(&process_info->sema, 1);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page(0);
+  struct shared_data wrapper;
+  wrapper.fn = fn_copy;
+  wrapper.wait_info = process_info;
+
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy(fn_copy, file_name, PGSIZE);
 
+  sema_down(&process_info->sema);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create(file_name, PRI_DEFAULT, start_process, &wrapper);
+  sema_up(&process_info->sema);
   if (tid == TID_ERROR)
     palloc_free_page(fn_copy);
+  process_info->tid = tid;
+  process_info->exit_code = -1;
+  process_info->refs_count = 1;
+  thread_current()->process_info = process_info;
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void start_process(void* file_name_) {
-  char* file_name = (char*)file_name_;
+  struct shared_data *file_data = (struct shared_data *) file_name_;
+  char* file_name = (char*)file_data->fn;
   struct thread* t = thread_current();
   struct intr_frame if_;
   bool success, pcb_success;
+  struct wait_status *wait = file_data->wait_info;
 
   /* Allocate process control block */
   struct process* new_pcb = malloc(sizeof(struct process));
+  list_init(&t->children);
+  list_push_back(&t->children, &wait->elem);
+
   success = pcb_success = new_pcb != NULL;
   new_pcb->exit_code = -1;
 
