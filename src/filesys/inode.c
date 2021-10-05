@@ -7,8 +7,8 @@
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
 
-/* Identifies an inode. */
-#define INODE_MAGIC 0x494e4f44
+/* Identifies an inode. (make sure ';') */
+#define INODE_MAGIC 0x494e4f44;
 
 /* On-disk inode.
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
