@@ -1,3 +1,4 @@
+/* Includes pagedir.c */
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
@@ -5,6 +6,8 @@
 #include "threads/thread.h"
 #include "userprog/process.h"
 
+#include "threads/vaddr.h"
+#include "pagedir.h"
 #include <string.h>
 /* Includes malloc.h and string.h */
 #include "threads/malloc.h"
@@ -32,26 +35,35 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
   /* Create syscall */
   if (args[0] == SYS_CREATE) {
-    
+
     char *file_name = (char *)args[1];
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
-    // printf("CURRENT fd_index = %d\n", fd_index);
 
-    /* Return false with error code */
+    /* Check each byte located in valid vaddr and pagedir */
+    if (!is_user_vaddr((void *)file_name) || 
+      !pagedir_get_page(pcb->pagedir, (void *) file_name)) {
+      f->eax = 0;
+      thread_current()->pcb->exit_code = -1;
+      process_exit();
+    }
+ 
+  
+
+    /* Check NULL or empty string file_name */
     if (!file_name || !strcmp(file_name, "")) {
       f->eax = 0;
       thread_current()->pcb->exit_code = -1;
       process_exit();
     }
     
-    /* Return false */
+    /* Check valid file_name len and if file exist in fdt */
     if (strlen(file_name) > 255 || check_file_exists(file_name, pcb, fd_index)) {
       f->eax = 0;
       return;
     } 
     
-    /* Return true */
+    /* Else create new open_file_table in process fdt */
     struct inode* new_inode = malloc(sizeof(struct inode));
     struct file* open_file_table = file_open(new_inode);
     pcb->fdt[fd_index] = open_file_table;
