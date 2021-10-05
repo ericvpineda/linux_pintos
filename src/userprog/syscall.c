@@ -11,6 +11,7 @@
 #include <string.h>
 #include "threads/malloc.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 
 
 static void syscall_handler(struct intr_frame*);
@@ -18,6 +19,8 @@ static void syscall_handler(struct intr_frame*);
 void syscall_init(void) { intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall"); }
 
 int check_file_exists(char *file_name, struct process *pcb, int fd_index);
+
+struct file* get_file(uint32_t* fd);
 
 static void syscall_handler(struct intr_frame* f UNUSED) {
   uint32_t* args = ((uint32_t*)f->esp);
@@ -31,7 +34,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
   /* printf("System call number: %d\n", args[0]); */
 
-  /* Create syscall */
+  /* create -- syscall */
   if (args[0] == SYS_CREATE) {
 
     char *file_name = (char *)args[1];
@@ -68,9 +71,47 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     f->eax = 1;
   }
 
-  if (args[0] == )
+  /* filesize -- Syscall */ 
+  if (args[0] == SYS_FILESIZE) {
+    struct file *open_file_table = get_file(args);
+    if (open_file_table) {
+      f->eax = inode_length(open_file_table->inode);
+    }
+  }
 
-  /* Open syscall */
+  /* close -- Syscall */
+  if (args[0] == SYS_CLOSE) {
+    struct file *open_file_table = get_file(args);
+    if (open_file_table) {
+      file_close(open_file_table);
+    }
+  }
+
+  /* tell -- syscall */
+  if (args[0] == SYS_TELL) {
+    struct file *open_file_table = get_file(args);
+    if (open_file_table) {
+      off_t curr_byte_pos = file_tell(open_file_table);
+      f->eax = curr_byte_pos;
+    }
+  }
+
+  /* seek -- syscall */
+  if (args[0] == SYS_SEEK) {
+    struct file *open_file_table = get_file(args);
+    if (open_file_table) {
+      file_seek(open_file_table, args[1]);
+    }
+  }
+
+  /* remove -- syscall */
+  if (args[0] == SYS_REMOVE) {
+    char *file_name = args[1];
+    bool res = filesys_remove(file_name);
+    f->eax = !res ? 0 : 1;
+  }
+
+  /* open -- syscall */
   if (args[0] == SYS_OPEN) {
     // printf("Opening file..\n");
     // char *input_file = (char *) args[1];
@@ -101,4 +142,13 @@ int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
     }
   }
   return 0;
+}
+
+struct file* get_file(uint32_t* args) {
+  int fd = (int) args[0];
+  struct process* pcb = thread_current()->pcb;
+  if (fd < pcb->fd_index) {
+    return pcb->fdt[fd];
+  }
+  return NULL;
 }
