@@ -16,7 +16,7 @@ Questions
  
  Solved questions 
  - how to get page directory pd for pagedir_get_page -> pd in pcb (process.h)
- - fix circular dependency (file.c, inode.c, syscall.c)
+ - fix circular dependency (file.c, inode.c, syscall.c) -> include filesys/filesys.h
 
 Issues:
 
