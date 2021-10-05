@@ -67,8 +67,7 @@ pid_t process_execute(const char* file_name) {
   return tid;
 }
 
-/* A thread function that loads a user process and starts it
-   running. */
+/* A thread function that loads a user process and starts it running. */
 static void start_process(void* file_name_) {
   char* file_name = (char*)file_name_;
   struct thread* t = thread_current();
@@ -79,6 +78,9 @@ static void start_process(void* file_name_) {
   struct process* new_pcb = malloc(sizeof(struct process));
   success = pcb_success = new_pcb != NULL;
   new_pcb->exit_code = -1;
+
+  /* Initialize next untaken fd index */
+  new_pcb->fd_index = 3;
 
   char *token_copy, *save_ptr_copy;
   char file_copy[strlen(file_name) + 1];
