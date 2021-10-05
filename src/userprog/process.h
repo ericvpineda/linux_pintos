@@ -29,8 +29,8 @@ struct process {
   char process_name[16];      /* Name of the main thread */
   struct thread* main_thread; /* Pointer to main thread */
   int exit_code;              /* Exit code */
-  struct file *fdt[128];      /* File descriptor table */
-  int fd_index;               /* Next unused fd index */
+  struct file *fdt[128];      /* ADDED: File descriptor table */
+  int fd_index;               /* ADDED: Next unused fd index */
 };
 
 void userprog_init(void);

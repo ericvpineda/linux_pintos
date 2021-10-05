@@ -9,10 +9,8 @@
 #include "threads/vaddr.h"
 #include "pagedir.h"
 #include <string.h>
-/* Includes malloc.h and string.h */
 #include "threads/malloc.h"
-// FIX: how to fix circular dependencies?
-#include "filesys/misc_utils.c"
+#include "filesys/filesys.h"
 
 
 static void syscall_handler(struct intr_frame*);
@@ -37,6 +35,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   if (args[0] == SYS_CREATE) {
 
     char *file_name = (char *)args[1];
+    size_t file_size = (size_t)args[2];
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
 
@@ -47,8 +46,6 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       thread_current()->pcb->exit_code = -1;
       process_exit();
     }
- 
-  
 
     /* Check NULL or empty string file_name */
     if (!file_name || !strcmp(file_name, "")) {
@@ -64,12 +61,15 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     } 
     
     /* Else create new open_file_table in process fdt */
-    struct inode* new_inode = malloc(sizeof(struct inode));
-    struct file* open_file_table = file_open(new_inode);
-    pcb->fdt[fd_index] = open_file_table;
-    pcb->fdt[fd_index]->name = file_name;
-    pcb->fd_index++;
-    f->eax = 1;
+    if (filesys_create(file_name, file_size)) {
+      struct file* open_file_table = filesys_open(file_name);
+      pcb->fdt[fd_index] = open_file_table;
+      pcb->fdt[fd_index]->name = file_name;
+      pcb->fd_index++;
+      f->eax = 1;
+    } else {
+      f->eax = 0;
+    }
   }
 
 
