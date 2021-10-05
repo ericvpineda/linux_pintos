@@ -22,6 +22,9 @@ int check_file_exists(char *file_name, struct process *pcb, int fd_index);
 
 struct file* get_file(uint32_t* fd);
 
+bool check_valid_location (char *file_name, struct process *pcb);
+
+
 static void syscall_handler(struct intr_frame* f UNUSED) {
   uint32_t* args = ((uint32_t*)f->esp);
 
@@ -40,14 +43,12 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     char *file_name = (char *)args[1];
     size_t file_size = (size_t)args[2];
     struct process* pcb = thread_current()->pcb;
-    int fd_index = pcb->fd_index;
 
     /* Check each byte located in valid vaddr and pagedir */
-    if (!is_user_vaddr((void *)file_name) || 
-      !pagedir_get_page(pcb->pagedir, (void *) file_name)) {
+    if (!check_valid_location(file_name, pcb)) {
       f->eax = 0;
       thread_current()->pcb->exit_code = -1;
-      process_exit();
+      return process_exit();
     }
 
     /* Check NULL, empty string file_name, file_name already exists */    
@@ -55,19 +56,6 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       f->eax = 0;
       return;
     }
-
-    /* Create new open_file_table in process fdt */
-    struct file* open_file_table = filesys_open(file_name);
-    if (!open_file_table) {
-      f->eax = 0;
-      thread_current()->pcb->exit_code = -1;
-      process_exit();
-    }
-    
-    /* Else create file */
-    pcb->fdt[fd_index] = open_file_table;
-    pcb->fdt[fd_index]->name = file_name;
-    pcb->fd_index++;
     f->eax = 1;
   }
 
@@ -106,16 +94,38 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
   /* remove -- syscall */
   if (args[0] == SYS_REMOVE) {
-    char *file_name = args[1];
+    char *file_name = (char *) args[1];
     bool res = filesys_remove(file_name);
     f->eax = !res ? 0 : 1;
   }
 
   /* open -- syscall */
   if (args[0] == SYS_OPEN) {
-    // printf("Opening file..\n");
-    // char *input_file = (char *) args[1];
-    // printf("File name = %s\n", input_file);
+    char *file_name = (char *) args[1];
+    struct process* pcb = thread_current()->pcb;
+    int fd_index = pcb->fd_index;
+    if (!check_valid_location(file_name, pcb) || !file_name) {
+      f->eax = 0;
+      thread_current()->pcb->exit_code = -1;
+      return process_exit();
+    } else if (*file_name == '\0') {
+      f->eax = -1;
+      return;
+    } 
+
+      /* Create new open_file_table in process fdt */
+    struct file* open_file_table = filesys_open(file_name);
+    if (!open_file_table) {
+      f->eax = -1;
+      thread_current()->pcb->exit_code = 0;
+      return;
+    }
+    
+    /* Else create file */
+    pcb->fdt[fd_index] = open_file_table;
+    pcb->fdt[fd_index]->name = file_name;
+    f->eax = fd_index;
+    pcb->fd_index++;
   }
 
   if (args[0] == SYS_EXIT) {
@@ -151,4 +161,12 @@ struct file* get_file(uint32_t* args) {
     return pcb->fdt[fd];
   }
   return NULL;
+}
+
+bool check_valid_location (char *file_name, struct process *pcb) {
+  if (!is_user_vaddr((void *)file_name) || 
+      !pagedir_get_page(pcb->pagedir, (void *) file_name)) {
+    return 0; 
+  }
+  return 1;
 }

@@ -35,7 +35,8 @@ Log
 - implemeneted remove -- syscall (need TESTING)
     - need pass test -- /base/syn-remove
     - need to modify fd connected to file?
-- working on: implementing open -- syscall 
+- implemented open -- syscall 
+- passing tests: all open -- syscalls (syscall.c)
 
  
 
