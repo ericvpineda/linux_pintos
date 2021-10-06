@@ -182,9 +182,37 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
   }
 
-  if (args[0] == SYS_WRITE && args[1] == 1) {
-    putbuf((char*) args[2], args[3]);
-    f->eax = args[3];
+  if (args[0] == SYS_WRITE) {
+    int fd = (int) args[1];
+    char *buffer = (char *) args[2];
+    off_t size = (off_t) args[3];
+    struct process* pcb = thread_current()->pcb;
+    int fd_index = pcb->fd_index;
+
+    if (fd <= 0 || fd >= fd_index || !check_valid_location((void *) buffer, pcb)) {
+      f->eax = -1;
+      thread_current()->pcb->exit_code = -1;
+      return process_exit();
+    }
+
+    if (fd == 1) {
+      putbuf((char*) args[2], args[3]);
+      f->eax = args[3];
+      return;
+    }
+    struct file *file_name = get_file(args);
+    if (file_name) {
+      off_t bytes_read = 0;
+      off_t total = 0;
+      while (bytes_read = file_write(file_name, buffer, size)) {
+        total += bytes_read;
+      }
+      f->eax = total;
+    } else {
+      /* File could not be read */
+      f->eax = -1;
+    }
+    
   }
 
   if (args[0] == SYS_PRACTICE) {
@@ -205,7 +233,7 @@ int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
 struct file* get_file(uint32_t* args) {
   int fd = (int) args[1];
   struct process* pcb = thread_current()->pcb;
-  if (fd < pcb->fd_index) {
+  if (fd < (pcb->fd_index) || fd >= 0) {
     return pcb->fdt[fd];
   }
   return NULL;

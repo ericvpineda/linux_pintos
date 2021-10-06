@@ -40,6 +40,8 @@ Log
 - implemented read -- syscall 
 - passed all tests: read -- syscall 
     - need test stdin calls (personal TEST) 
+- implemented write -- syscall 
+- passed all tests: write -- syscall 
 
  
 
