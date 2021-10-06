@@ -25,6 +25,14 @@ typedef int tid_t;
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63     /* Highest priority. */
 
+struct wait_status {
+   tid_t tid;
+   struct semaphore sema;
+   int exit_code;
+   int refs_count;
+   struct list_elem elem;
+};
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -89,6 +97,8 @@ struct thread {
   uint8_t* stack;            /* Saved stack pointer. */
   int priority;              /* Priority. */
   struct list_elem allelem;  /* List element for all threads list. */
+  struct list children; /* List element for all children of this process. */
+  struct wait_status *process_info;
 
   /* Shared between thread.c and synch.c. */
   struct list_elem elem; /* List element. */
