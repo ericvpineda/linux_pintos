@@ -135,7 +135,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     process_exit();
   }
 
-  /* Read syscall */
+  /* Read -- syscall */
   if (args[0] == SYS_READ) {
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
@@ -150,7 +150,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       return process_exit();
     }
 
-    // READ from stdin
+    // Read from stdin
     if (!fd) {
       input_init();
       uint8_t typing_key;
@@ -186,14 +186,14 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
 
-    /* check invalid fd and vaddr/page locations */
+    /* Check invalid fd and vaddr/page locations */
     if (fd <= 0 || fd >= fd_index || !check_valid_location((void *) buffer, pcb)) {
       f->eax = -1;
       thread_current()->pcb->exit_code = -1;
       return process_exit();
     }
 
-    /* check if fd is stdout */
+    /* Check if fd is stdout */
     if (fd == 1) {
       putbuf((char*) args[2], args[3]);
       f->eax = args[3];
