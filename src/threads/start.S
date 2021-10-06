@@ -30,7 +30,7 @@ start:
 	mov %ax, %es
 
 # Initialize FPU registers
-	#fninit 
+	fninit 
 
 # Set string instructions to go upward.
 	cld
@@ -177,7 +177,7 @@ start:
 	mov %ax, %ss
 	addl $LOADER_PHYS_BASE, %esp
 	movl $0, %ebp			# Null-terminate main()'s backtrace
-	fninit
+	#fninit
 
 #### Call main().
 
