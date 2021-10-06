@@ -15,18 +15,14 @@
 #include "devices/input.h"
 
 
-
+/* Prototype functions */
 static void syscall_handler(struct intr_frame*);
-
 void syscall_init(void) { intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall"); }
-
 int check_file_exists(char *file_name, struct process *pcb, int fd_index);
-
 struct file* get_file(uint32_t* fd);
-
 bool check_valid_location (void *file_name, struct process *pcb);
 
-
+/* Main syscall handler */
 static void syscall_handler(struct intr_frame* f UNUSED) {
   uint32_t* args = ((uint32_t*)f->esp);
 
@@ -39,7 +35,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
   /* printf("System call number: %d\n", args[0]); */
 
-  /* create -- syscall */
+  /* Create -- syscall */
   if (args[0] == SYS_CREATE) {
 
     char *file_name = (char *)args[1];
@@ -61,7 +57,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     f->eax = 1;
   }
 
-  /* filesize -- Syscall */ 
+  /* Filesize -- Syscall */ 
   if (args[0] == SYS_FILESIZE) {
     struct file *open_file_table = get_file(args);
     if (open_file_table) {
@@ -69,7 +65,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
   }
 
-  /* close -- Syscall */
+  /* Close -- Syscall */
   if (args[0] == SYS_CLOSE) {
     struct file *open_file_table = get_file(args);
     if (open_file_table) {
@@ -77,7 +73,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
   }
 
-  /* tell -- syscall */
+  /* Tell -- syscall */
   if (args[0] == SYS_TELL) {
     struct file *open_file_table = get_file(args);
     if (open_file_table) {
@@ -86,7 +82,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
   }
 
-  /* seek -- syscall */
+  /* Seek -- syscall */
   if (args[0] == SYS_SEEK) {
     struct file *open_file_table = get_file(args);
     if (open_file_table) {
@@ -94,14 +90,14 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
   }
 
-  /* remove -- syscall */
+  /* Remove -- syscall */
   if (args[0] == SYS_REMOVE) {
     char *file_name = (char *) args[1];
     bool res = filesys_remove(file_name);
     f->eax = !res ? 0 : 1;
   }
 
-  /* open -- syscall */
+  /* Open -- syscall */
   if (args[0] == SYS_OPEN) {
     char *file_name = (char *) args[1];
     struct process* pcb = thread_current()->pcb;
@@ -132,7 +128,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     pcb->fd_index++;
   }
 
-  /* exit -- syscall */
+  /* Exit -- syscall */
   if (args[0] == SYS_EXIT) {
     f->eax = args[1];
     thread_current()->pcb->exit_code = args[1];
@@ -182,6 +178,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
   }
 
+  /* Write -- syscall */
   if (args[0] == SYS_WRITE) {
     int fd = (int) args[1];
     char *buffer = (char *) args[2];
@@ -189,17 +186,21 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
 
+    /* check invalid fd and vaddr/page locations */
     if (fd <= 0 || fd >= fd_index || !check_valid_location((void *) buffer, pcb)) {
       f->eax = -1;
       thread_current()->pcb->exit_code = -1;
       return process_exit();
     }
 
+    /* check if fd is stdout */
     if (fd == 1) {
       putbuf((char*) args[2], args[3]);
       f->eax = args[3];
       return;
     }
+    
+    /* Else read from fdt */
     struct file *file_name = get_file(args);
     if (file_name) {
       off_t bytes_read = 0;
@@ -215,11 +216,15 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     
   }
 
+  /* Practice -- syscall */
   if (args[0] == SYS_PRACTICE) {
     f->eax = args[1] + 1;
   }
 }
 
+// HELPER METHODS
+
+/* Check file exists in process fdt */
 int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
   for (int i=3; i < fd_index; i++) {
     char *pcb_file = pcb->fdt[i]->name;
@@ -230,6 +235,7 @@ int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
   return 0;
 }
 
+/* Get file associated with fd */
 struct file* get_file(uint32_t* args) {
   int fd = (int) args[1];
   struct process* pcb = thread_current()->pcb;
@@ -239,6 +245,7 @@ struct file* get_file(uint32_t* args) {
   return NULL;
 }
 
+/* Check file_name valid location in vaddr && pagedir */
 bool check_valid_location (void *file_name, struct process *pcb) {
   if (!is_user_vaddr(file_name) || 
       !pagedir_get_page(pcb->pagedir, file_name)) {
