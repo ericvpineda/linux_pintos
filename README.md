@@ -41,9 +41,7 @@ Log
 - passed all tests: read -- syscall 
     - need test stdin calls (personal TEST) 
 - implemented write -- syscall 
-- passed all tests: write -- syscall 
-
- 
+- passed all tests: write -- syscall
 
 Note:
 - c. files has .h files as dependency 
