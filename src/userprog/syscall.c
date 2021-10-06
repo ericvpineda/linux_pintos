@@ -12,6 +12,8 @@
 #include "threads/malloc.h"
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
+#include "devices/input.h"
+
 
 
 static void syscall_handler(struct intr_frame*);
@@ -22,7 +24,7 @@ int check_file_exists(char *file_name, struct process *pcb, int fd_index);
 
 struct file* get_file(uint32_t* fd);
 
-bool check_valid_location (char *file_name, struct process *pcb);
+bool check_valid_location (void *file_name, struct process *pcb);
 
 
 static void syscall_handler(struct intr_frame* f UNUSED) {
@@ -45,7 +47,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     struct process* pcb = thread_current()->pcb;
 
     /* Check each byte located in valid vaddr and pagedir */
-    if (!check_valid_location(file_name, pcb)) {
+    if (!check_valid_location((void *)file_name, pcb)) {
       f->eax = 0;
       thread_current()->pcb->exit_code = -1;
       return process_exit();
@@ -63,7 +65,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   if (args[0] == SYS_FILESIZE) {
     struct file *open_file_table = get_file(args);
     if (open_file_table) {
-      f->eax = inode_length(open_file_table->inode);
+      f->eax = file_length(open_file_table);
     }
   }
 
@@ -104,7 +106,8 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     char *file_name = (char *) args[1];
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
-    if (!check_valid_location(file_name, pcb) || !file_name) {
+
+    if (!check_valid_location((void *)file_name, pcb) || !file_name) {
       f->eax = 0;
       thread_current()->pcb->exit_code = -1;
       return process_exit();
@@ -129,10 +132,54 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     pcb->fd_index++;
   }
 
+  /* exit -- syscall */
   if (args[0] == SYS_EXIT) {
     f->eax = args[1];
     thread_current()->pcb->exit_code = args[1];
     process_exit();
+  }
+
+  /* Read syscall */
+  if (args[0] == SYS_READ) {
+    struct process* pcb = thread_current()->pcb;
+    int fd_index = pcb->fd_index;
+    int fd = (int) args[1];
+    char *buffer = (char *) args[2];
+    off_t size = (off_t) args[3];
+
+    /* Check buffer correct location & buffer valid fd */
+    if (fd == 1 || fd < 0 || fd >= fd_index || !check_valid_location((void *)buffer, pcb)) {
+      f->eax = -1;
+      thread_current()->pcb->exit_code = -1;
+      return process_exit();
+    }
+
+    // READ from stdin
+    if (!fd) {
+      input_init();
+      uint8_t typing_key;
+      size_t total = 0;
+      while ((size - total) && (typing_key = input_getc())) {
+        total += 1;
+        buffer[total] = typing_key;
+      }
+      f->eax = total;
+      return;
+    }
+
+    /* Else read from open file table */
+    struct file *file_name = get_file(args);
+    if (file_name) {
+      off_t bytes_read = 0;
+      off_t total = 0;
+      while ((bytes_read = file_read(file_name, buffer, size))) {
+        total += bytes_read;
+      }
+      f->eax = total;
+    } else {
+      /* File could not be read */
+      f->eax = -1;
+    }
   }
 
   if (args[0] == SYS_WRITE && args[1] == 1) {
@@ -156,7 +203,7 @@ int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
 }
 
 struct file* get_file(uint32_t* args) {
-  int fd = (int) args[0];
+  int fd = (int) args[1];
   struct process* pcb = thread_current()->pcb;
   if (fd < pcb->fd_index) {
     return pcb->fdt[fd];
@@ -164,9 +211,9 @@ struct file* get_file(uint32_t* args) {
   return NULL;
 }
 
-bool check_valid_location (char *file_name, struct process *pcb) {
-  if (!is_user_vaddr((void *)file_name) || 
-      !pagedir_get_page(pcb->pagedir, (void *) file_name)) {
+bool check_valid_location (void *file_name, struct process *pcb) {
+  if (!is_user_vaddr(file_name) || 
+      !pagedir_get_page(pcb->pagedir, file_name)) {
     return 0; 
   }
   return 1;

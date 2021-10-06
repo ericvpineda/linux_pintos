@@ -13,6 +13,7 @@ Questions
 - how to add stdin/out/err to pcb->fdt (process.c)
 - do I need to catch file NULL for fd (syscall.c)
 - need validate # args (syscall.c)
+- does exit(-1) calls need f->eax return values? 
  
  Solved questions 
  - how to get page directory pd for pagedir_get_page -> pd in pcb (process.h)
@@ -29,14 +30,16 @@ Log
 - clean up create -- syscall logic 
 - implemented filesize -- syscall (need TESTING)
 - implemented close -- syscall 
-- working on tests: close -- syscall (need OPEN implemented)
-    - need pass tests: close-normal, close-twice
+- passing all tests: close -- syscall 
 - implemented tell -- syscall (need TESTING)
 - implemeneted remove -- syscall (need TESTING)
-    - need pass test -- /base/syn-remove
+    - need pass test -- /base/syn-remove (need WRITE, READ syscalls)
     - need to modify fd connected to file?
 - implemented open -- syscall 
 - passing tests: all open -- syscalls (syscall.c)
+- implemented read -- syscall 
+- passed all tests: read -- syscall 
+    - need test stdin calls (personal TEST) 
 
  
 
