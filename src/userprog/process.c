@@ -80,7 +80,6 @@ pid_t process_execute(const char* file_name) {
   sema_up(&process_info->sema);
   if (tid == TID_ERROR)
     palloc_free_page(fn_copy);
-  free(wrapper);
   process_info->tid = tid;
   process_info->exit_code = -1;
   process_info->refs_count = 1;
@@ -201,6 +200,7 @@ static void start_process(void* file_name_) {
 
   /* Clean up. Exit on failure or jump to userspace */
   palloc_free_page(file_name);
+  free(file_data);
   if (!success) {
     sema_up(&temporary);
     thread_exit();
