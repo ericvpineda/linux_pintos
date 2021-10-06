@@ -25,7 +25,7 @@ static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
 
 struct shared_data {
-  void* fn;
+  char* fn;
   struct wait_status *wait_info;
 };
 
@@ -59,24 +59,28 @@ pid_t process_execute(const char* file_name) {
 
   struct wait_status *process_info = malloc(sizeof(struct wait_status));
 
+  sema_init(&temporary, 0);
+
   sema_init(&process_info->sema, 1);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page(0);
-  struct shared_data wrapper;
-  wrapper.fn = fn_copy;
-  wrapper.wait_info = process_info;
+  strlcpy(fn_copy, file_name, PGSIZE);
+
+  struct shared_data *wrapper = malloc(sizeof(struct shared_data));
+  wrapper->fn = fn_copy;
+  wrapper->wait_info = process_info;
 
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy(fn_copy, file_name, PGSIZE);
 
   sema_down(&process_info->sema);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create(file_name, PRI_DEFAULT, start_process, &wrapper);
+  tid = thread_create(file_name, PRI_DEFAULT, start_process, (void*) wrapper);
   sema_up(&process_info->sema);
   if (tid == TID_ERROR)
     palloc_free_page(fn_copy);
+  free(wrapper);
   process_info->tid = tid;
   process_info->exit_code = -1;
   process_info->refs_count = 1;
