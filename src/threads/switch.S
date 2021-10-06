@@ -12,6 +12,8 @@
 #### restore the registers.  As part of switching stacks we record the
 #### current stack pointer in CUR's thread structure.
 
+## Do the same in intr-stubs.S
+
 .globl switch_threads
 .func switch_threads
 switch_threads:
@@ -27,6 +29,10 @@ switch_threads:
 	pushl %ebp
 	pushl %esi
 	pushl %edi
+	# lower the the stack by 108 bytes
+	subl $0x6c, %esp
+	fsave 0(%esp)
+	fninit
 
 	# Get offsetof (struct thread, stack).
 .globl thread_stack_ofs
@@ -41,6 +47,9 @@ switch_threads:
 	movl (%ecx,%edx,1), %esp
 
 	# Restore caller's register state.
+	frstor 0(%esp)
+	# raise stack by 108 bytes
+	addl $0x6c, %esp
 	popl %edi
 	popl %esi
 	popl %ebp
