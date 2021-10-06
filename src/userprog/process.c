@@ -20,7 +20,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
-static struct semaphore temporary;
+
 static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
 
@@ -59,7 +59,6 @@ pid_t process_execute(const char* file_name) {
 
   struct wait_status *process_info = malloc(sizeof(struct wait_status));
 
-  sema_init(&temporary, 0);
 
   sema_init(&process_info->sema, 1);
   /* Make a copy of FILE_NAME.
@@ -202,7 +201,6 @@ static void start_process(void* file_name_) {
   palloc_free_page(file_name);
   free(file_data);
   if (!success) {
-    sema_up(&temporary);
     thread_exit();
   }
 
@@ -226,7 +224,6 @@ static void start_process(void* file_name_) {
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int process_wait(pid_t child_pid UNUSED) {
-  sema_down(&temporary);
   return 0;
 }
 
@@ -267,7 +264,6 @@ void process_exit(void) {
   cur->pcb = NULL;
   free(pcb_to_free);
 
-  sema_up(&temporary);
   
   thread_exit();
 }
