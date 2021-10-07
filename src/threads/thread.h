@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/synch.h"
 #include "threads/fixed-point.h"
+#include <pthread.h>
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -30,6 +31,7 @@ struct wait_status {
    struct semaphore sema;
    int exit_code;
    int refs_count;
+   pthread_mutex_t lock;
    struct list_elem elem;
 };
 

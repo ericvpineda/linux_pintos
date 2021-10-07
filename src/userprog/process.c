@@ -146,6 +146,7 @@ static void start_process(void* file_name_) {
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
 
+    pthread_mutex_lock(&wait->lock);
     // decrease ref count while child is locked
     wait->refs_count--;
     // if ref count is 0, remove from list and free
@@ -153,6 +154,8 @@ static void start_process(void* file_name_) {
       list_remove(&wait->elem);
       free(wait);
     }
+
+    pthread_mutex_unlock(&wait->lock);
 
     success = load(process_name, &if_.eip, &if_.esp);
     wait->exit_code = success;
@@ -234,7 +237,7 @@ static void start_process(void* file_name_) {
    If it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If child_pid is invalid or if it was not a
    child of the calling process, or if process_wait() has already
-   been successfully called for the given PID, returns -1
+   been successfully called for the given PID,w returns -1
    immediately, without waiting.
 
    This function will be implemented in problem 2-2.  For now, it
@@ -304,27 +307,32 @@ void process_exit(void) {
   struct list *thread_children = &cur->children;
   struct wait_status *child = NULL;
   struct list_elem *e;
+
   for (e = list_begin(thread_children); e != list_end(thread_children); e = list_next(e)) {
     child = list_entry(e, struct wait_status, elem);
+    pthread_mutex_lock(&child->lock);
     if (child->refs_count == 0) {
       list_remove(&child->elem);
       free(child);
     } else {
       child->refs_count--;
     }
-    
+    pthread_mutex_unlock(&child->lock);
   }
 
+  pthread_mutex_lock(&cur->process_info->lock);
   // decrement ref count for this thread
-  thread_current()->process_info->refs_count--;
+  cur->process_info->refs_count--;
 
   // free wait_status for this thread if ref count is 0
-  if (thread_current()->process_info->refs_count == 0) {
-    list_remove(&thread_current()->process_info->elem);
-    free(thread_current()->process_info);
+  if (cur->process_info->refs_count == 0) {
+    list_remove(&cur->process_info->elem);
+    free(cur->process_info);
   } else {
-    sema_up(&thread_current()->process_info->sema);
+    sema_up(&cur->process_info->sema);
   }
+
+  pthread_mutex_unlock(&cur->process_info->lock);
   
   thread_exit();
 }
