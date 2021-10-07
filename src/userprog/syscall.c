@@ -13,6 +13,8 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "devices/input.h"
+#include <float.h>
+
 
 
 /* Prototype functions */
@@ -219,6 +221,13 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Practice -- syscall */
   if (args[0] == SYS_PRACTICE) {
     f->eax = args[1] + 1;
+  }
+
+  /* compute E -- syscall */
+  if (args[0] == SYS_COMPUTE_E) {
+    int e_value = (int) args[1];
+    int res = sys_sum_to_e(e_value);
+    f->eax = res; 
   }
 }
 
