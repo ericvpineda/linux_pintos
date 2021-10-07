@@ -102,10 +102,21 @@ struct thread {
   unsigned magic; /* Detects stack overflow. */
 };
 
-/* If false (default), use round-robin scheduler.
-   If true, use multi-level feedback queue scheduler.
-   Controlled by kernel command-line option "-o mlfqs". */
-extern bool thread_mlfqs;
+/* Types of scheduler that the user can request the kernel
+ * use to schedule threads at runtime. */
+enum sched_policy {
+  SCHED_FIFO,  // First-in, first-out scheduler
+  SCHED_PRIO,  // Strict-priority scheduler with round-robin tiebreaking
+  SCHED_FAIR,  // Implementation-defined fair scheduler
+  SCHED_MLFQS, // Multi-level Feedback Queue Scheduler
+};
+#define SCHED_DEFAULT SCHED_FIFO
+
+/* Determines which scheduling policy the kernel should use.
+ * Controller by the kernel command-line options
+ *  "-sched-default", "-sched-fair", "-sched-mlfqs", "-sched-fifo"
+ * Is equal to SCHED_FIFO by default. */
+extern enum sched_policy active_sched_policy;
 
 void thread_init(void);
 void thread_start(void);

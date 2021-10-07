@@ -22,7 +22,7 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
-static struct list ready_list;
+static struct list fifo_ready_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -53,22 +53,48 @@ static long long user_ticks;   /* # of timer ticks in user programs. */
 #define TIME_SLICE 4          /* # of timer ticks to give each thread. */
 static unsigned thread_ticks; /* # of timer ticks since last yield. */
 
-/* If false (default), use round-robin scheduler.
-   If true, use multi-level feedback queue scheduler.
-   Controlled by kernel command-line option "-o mlfqs". */
-bool thread_mlfqs;
-
-static void kernel_thread(thread_func*, void* aux);
-
-static void idle(void* aux UNUSED);
-static struct thread* running_thread(void);
-static struct thread* next_thread_to_run(void);
 static void init_thread(struct thread*, const char* name, int priority);
 static bool is_thread(struct thread*) UNUSED;
 static void* alloc_frame(struct thread*, size_t size);
 static void schedule(void);
-void thread_schedule_tail(struct thread* prev);
+static void thread_enqueue(struct thread* t);
 static tid_t allocate_tid(void);
+void thread_switch_tail(struct thread* prev);
+
+static void kernel_thread(thread_func*, void* aux);
+static void idle(void* aux UNUSED);
+static struct thread* running_thread(void);
+
+static struct thread* next_thread_to_run(void);
+static struct thread* thread_schedule_fifo(void);
+static struct thread* thread_schedule_prio(void);
+static struct thread* thread_schedule_fair(void);
+static struct thread* thread_schedule_mlfqs(void);
+static struct thread* thread_schedule_reserved(void);
+
+/* Determines which scheduler the kernel should use.
+   Controlled by the kernel command-line options
+    "-sched=fifo", "-sched=prio",
+    "-sched=fair". "-sched=mlfqs"
+   Is equal to SCHED_FIFO by default. */
+enum sched_policy active_sched_policy;
+
+/* Selects a thread to run from the ready list according to
+   some scheduling policy, and returns a pointer to it. */
+typedef struct thread* scheduler_func(void);
+
+/* Jump table for dynamically dispatching the current scheduling
+   policy in use by the kernel. */
+scheduler_func* scheduler_jump_table[8] = {
+  thread_schedule_fifo,
+  thread_schedule_prio,
+  thread_schedule_fair,
+  thread_schedule_mlfqs,
+  thread_schedule_reserved,
+  thread_schedule_reserved,
+  thread_schedule_reserved,
+  thread_schedule_reserved
+};
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -87,7 +113,7 @@ void thread_init(void) {
   ASSERT(intr_get_level() == INTR_OFF);
 
   lock_init(&tid_lock);
-  list_init(&ready_list);
+  list_init(&fifo_ready_list);
   list_init(&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -206,6 +232,20 @@ void thread_block(void) {
   schedule();
 }
 
+/* Places a thread on the ready structure appropriate for the
+   current active scheduling policy.
+   
+   This function must be called with interrupts turned off. */
+static void thread_enqueue(struct thread* t) {
+  ASSERT(intr_get_level() == INTR_OFF);
+  ASSERT(is_thread(t));
+
+  if (active_sched_policy == SCHED_FIFO)
+    list_push_back(&fifo_ready_list, &t->elem);
+  else
+    PANIC("Unimplemented scheduling policy value: %d", active_sched_policy);
+}
+
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -221,7 +261,7 @@ void thread_unblock(struct thread* t) {
 
   old_level = intr_disable();
   ASSERT(t->status == THREAD_BLOCKED);
-  list_push_back(&ready_list, &t->elem);
+  thread_enqueue(t);
   t->status = THREAD_READY;
   intr_set_level(old_level);
 }
@@ -256,7 +296,7 @@ void thread_exit(void) {
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
-     when it calls thread_schedule_tail(). */
+     when it calls thread_switch_tail(). */
   intr_disable();
   list_remove(&thread_current()->allelem);
   thread_current()->status = THREAD_DYING;
@@ -274,7 +314,7 @@ void thread_yield(void) {
 
   old_level = intr_disable();
   if (cur != idle_thread)
-    list_push_back(&ready_list, &cur->elem);
+    thread_enqueue(cur);
   cur->status = THREAD_READY;
   schedule();
   intr_set_level(old_level);
@@ -413,16 +453,42 @@ static void* alloc_frame(struct thread* t, size_t size) {
   return t->stack;
 }
 
+/* First-in first-out scheduler */
+static struct thread* thread_schedule_fifo(void) {
+  if (!list_empty(&fifo_ready_list))
+    return list_entry(list_pop_front(&fifo_ready_list), struct thread, elem);
+  else
+    return idle_thread;
+}
+
+/* Strict priority scheduler */
+static struct thread* thread_schedule_prio(void) {
+  PANIC("Unimplemented scheduler policy: \"-sched=prio\"");
+}
+
+/* Fair priority scheduler */
+static struct thread* thread_schedule_fair(void) {
+  PANIC("Unimplemented scheduler policy: \"-sched=fair\"");
+}
+
+/* Multi-level feedback queue scheduler */
+static struct thread* thread_schedule_mlfqs(void) {
+  PANIC("Unimplemented scheduler policy: \"-sched=mlfqs\"");
+}
+
+/* Not an actual scheduling policy — placeholder for empty
+ * slots in the scheduler jump table. */
+static struct thread* thread_schedule_reserved(void) {
+  PANIC("Invalid scheduler policy value: %d", active_sched_policy);
+}
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
 static struct thread* next_thread_to_run(void) {
-  if (list_empty(&ready_list))
-    return idle_thread;
-  else
-    return list_entry(list_pop_front(&ready_list), struct thread, elem);
+  return (scheduler_jump_table[active_sched_policy])();
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -431,7 +497,7 @@ static struct thread* next_thread_to_run(void) {
    At this function's invocation, we just switched from thread
    PREV, the new thread is already running, and interrupts are
    still disabled.  This function is normally invoked by
-   thread_schedule() as its final action before returning, but
+   thread_switch() as its final action before returning, but
    the first time a thread is scheduled it is called by
    switch_entry() (see switch.S).
 
@@ -441,7 +507,7 @@ static struct thread* next_thread_to_run(void) {
 
    After this function and its caller returns, the thread switch
    is complete. */
-void thread_schedule_tail(struct thread* prev) {
+void thread_switch_tail(struct thread* prev) {
   struct thread* cur = running_thread();
 
   ASSERT(intr_get_level() == INTR_OFF);
@@ -468,12 +534,12 @@ void thread_schedule_tail(struct thread* prev) {
   }
 }
 
-/* Schedules a new process.  At entry, interrupts must be off and
+/* Schedules a new thread.  At entry, interrupts must be off and
    the running process's state must have been changed from
    running to some other state.  This function finds another
    thread to run and switches to it.
 
-   It's not safe to call printf() until thread_schedule_tail()
+   It's not safe to call printf() until thread_switch_tail()
    has completed. */
 static void schedule(void) {
   struct thread* cur = running_thread();
@@ -486,7 +552,7 @@ static void schedule(void) {
 
   if (cur != next)
     prev = switch_threads(cur, next);
-  thread_schedule_tail(prev);
+  thread_switch_tail(prev);
 }
 
 /* Returns a tid to use for a new thread. */
