@@ -47,5 +47,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
   else if (args[0] == SYS_WAIT) {
     return;
+    //f->eax = process_wait((char*) args[1]);
   }
+
 }
