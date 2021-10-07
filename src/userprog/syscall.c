@@ -215,7 +215,6 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       /* File could not be read */
       f->eax = -1;
     }
-    
   }
 
   /* Practice -- syscall */
