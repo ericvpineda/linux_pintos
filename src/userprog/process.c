@@ -311,8 +311,8 @@ int process_wait(pid_t child_pid) {
   
   sema_down(&child->sema);
   int exit_code = child->exit_code;
-  // list_remove(&child->elem);
-  // free(child);
+  list_remove(&child->elem);
+  free(child);
 
   return exit_code;
   // sema_down(&temporary);
