@@ -120,19 +120,17 @@ static void start_process(void* file_name_) {
 
     success = load(process_name, &if_.eip, &if_.esp);
 
-    void* temp = if_.esp;
-
     /* Added fpu code */
-    // int FPU_SIZE = 108;
-    // uint8_t fpu[FPU_SIZE];
-    // uint8_t init_fpu[FPU_SIZE];
-    // asm("fsave (%0); fninit; fsave (%1); frstor (%0)" : : "g"(&fpu), "g"(&init_fpu));
-    // for (int i = 0; i < FPU_SIZE; i++) {
-    //   if_.esp--;
-    //   strlcpy(if_.esp, init_fpu[i], 1);
-    // }
+    int FPU_SIZE = 108;
+    uint8_t fpu1[FPU_SIZE];
+    uint8_t init_fpu1[FPU_SIZE];
+    asm("fsave (%0); fninit; fsave (%1); frstor (%0)" : : "g"(&fpu1), "g"(&init_fpu1));
+    for (int i = 0; i < FPU_SIZE; i++) {
+      if_.st[i] = init_fpu1[i];
+    }
     /* End of added fpu code */
 
+    void* temp = if_.esp;
     
     // copy strings onto stack
     for (int i = 0; i < argc; i++) {
