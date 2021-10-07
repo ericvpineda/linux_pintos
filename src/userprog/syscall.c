@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include "userprog/process.h"
 #include "devices/shutdown.h"
+#include <stdlib.h>
 
 static void syscall_handler(struct intr_frame*);
 
@@ -46,8 +47,8 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   }
 
   else if (args[0] == SYS_WAIT) {
-    return;
-    //f->eax = process_wait((char*) args[1]);
+    pid_t pid = atoi((char*) args[1]);
+    f->eax = process_wait(pid);
   }
 
 }
