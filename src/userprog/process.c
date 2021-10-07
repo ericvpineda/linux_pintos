@@ -45,6 +45,9 @@ void userprog_init(void) {
   t->pcb = calloc(sizeof(struct process), 1);
   success = t->pcb != NULL;
 
+  /* Initialize list of children */
+  list_init(&t->children);
+
   /* Kill the kernel if we did not succeed */
   ASSERT(success);
 }
@@ -58,12 +61,12 @@ pid_t process_execute(const char* file_name) {
   tid_t tid;
   struct thread* t = thread_current();
 
-
   t->process_info = malloc(sizeof(struct wait_status));
 
   //sema_init(&temporary, 0);
 
   sema_init(&t->process_info->sema, 1);
+  lock_init(&t->process_info->ref_cnt_lock);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page(0);
@@ -76,9 +79,9 @@ pid_t process_execute(const char* file_name) {
   if (fn_copy == NULL)
     return TID_ERROR;
 
-  sema_down(&t->process_info->sema);
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create(file_name, PRI_DEFAULT, start_process, (void*) wrapper);
+  sema_down(&t->process_info->sema);
   if (tid == TID_ERROR)
     palloc_free_page(fn_copy);
   return tid;
@@ -102,7 +105,7 @@ static void start_process(void* file_name_) {
   struct process* new_pcb = malloc(sizeof(struct process));
 
   // initialize children list
-  list_init(&t->children);
+  // list_init(&t->children);
   list_push_back(&t->children, &wait->elem);
 
   success = pcb_success = new_pcb != NULL;
@@ -146,7 +149,7 @@ static void start_process(void* file_name_) {
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
 
-    pthread_mutex_lock(&wait->lock);
+    lock_acquire(&wait->ref_cnt_lock);
     // decrease ref count while child is locked
     wait->refs_count--;
     // if ref count is 0, remove from list and free
@@ -155,11 +158,12 @@ static void start_process(void* file_name_) {
       free(wait);
     }
 
-    pthread_mutex_unlock(&wait->lock);
+    lock_release(&wait->ref_cnt_lock);
 
     success = load(process_name, &if_.eip, &if_.esp);
-    wait->exit_code = success;
-    sema_up(&wait->sema);
+    wait->exit_code = success ? 0 : -1;
+    if (success)
+      sema_up(&wait->sema);
 
     void* temp = if_.esp;
     
@@ -219,6 +223,7 @@ static void start_process(void* file_name_) {
   free(file_data);
   if (!success) {
     sema_up(&wait->sema);
+    // free(wait);
     //sema_up(&temporary);
     thread_exit();
   }
@@ -256,8 +261,7 @@ int process_wait(pid_t child_pid) {
     }
   }
   if (child == NULL) {
-    //child's exit code should be default -1
-    return child->exit_code;
+    return -1;
   }
 
   sema_down(&child->sema);
@@ -310,17 +314,17 @@ void process_exit(void) {
 
   for (e = list_begin(thread_children); e != list_end(thread_children); e = list_next(e)) {
     child = list_entry(e, struct wait_status, elem);
-    pthread_mutex_lock(&child->lock);
+    lock_acquire(&child->ref_cnt_lock);
     if (child->refs_count == 0) {
       list_remove(&child->elem);
       free(child);
     } else {
       child->refs_count--;
     }
-    pthread_mutex_unlock(&child->lock);
+    lock_release(&child->ref_cnt_lock);
   }
 
-  pthread_mutex_lock(&cur->process_info->lock);
+  lock_acquire(&cur->process_info->ref_cnt_lock);
   // decrement ref count for this thread
   cur->process_info->refs_count--;
 
@@ -332,8 +336,10 @@ void process_exit(void) {
     sema_up(&cur->process_info->sema);
   }
 
-  pthread_mutex_unlock(&cur->process_info->lock);
+  lock_release(&cur->process_info->ref_cnt_lock);
   
+  // sema_up(&temporary);
+
   thread_exit();
 }
 
