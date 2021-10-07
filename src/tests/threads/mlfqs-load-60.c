@@ -114,7 +114,7 @@ static void load_thread(void* aux);
 void test_mlfqs_load_60(void) {
   int i;
 
-  ASSERT(thread_mlfqs);
+  ASSERT(active_sched_policy == SCHED_MLFQS);
 
   start_time = timer_ticks();
   msg("Starting %d niced load threads...", THREAD_CNT);

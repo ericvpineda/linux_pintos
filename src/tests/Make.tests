@@ -81,6 +81,8 @@ TESTCMD += --swap-size=4
 endif
 TESTCMD += -- -q
 TESTCMD += $(KERNELFLAGS)
+TESTCMD += $($(TEST)_KERNELARGS)
+
 ifeq ($(filter userprog, $(KERNEL_SUBDIRS)), userprog)
 TESTCMD += -f
 endif

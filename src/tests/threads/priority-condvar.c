@@ -17,7 +17,7 @@ void test_priority_condvar(void) {
   int i;
 
   /* This test does not work with the MLFQS. */
-  ASSERT(!thread_mlfqs);
+  ASSERT(active_sched_policy == SCHED_PRIO);
 
   lock_init(&lock);
   cond_init(&condition);
