@@ -80,7 +80,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   if (args[0] == SYS_CLOSE) {
     lock_acquire(&syscall_lock);
     struct process* pcb = thread_current()->pcb;
-    size_t fd = (size_t) args[1];
+    int fd = args[1];
     int fd_index = pcb->fd_index;
     
     if (fd >= 3 && fd < fd_index && check_valid_location((void *) &fd, pcb)) {
