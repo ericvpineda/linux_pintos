@@ -19,7 +19,9 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/syscall.h"
 
+// static struct lock executable_lock;
 static struct semaphore temporary;
 static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
@@ -34,6 +36,7 @@ struct shared_data {
    the first user process. Any additions to the PCB should be also
    initialized here if main needs those members */
 void userprog_init(void) {
+  // lock_init(&executable_lock);
   struct thread* t = thread_current();
   bool success;
 
@@ -87,8 +90,7 @@ pid_t process_execute(const char* file_name) {
   return tid;
 }
 
-/* A thread function that loads a user process and starts it
-   running. */
+/* A thread function that loads a user process and starts it running. */
 static void start_process(void* file_name_) {
   struct shared_data *file_data = (struct shared_data *) file_name_;
   char* file_name = (char*)file_data->fn;
@@ -104,6 +106,12 @@ static void start_process(void* file_name_) {
 
   success = pcb_success = new_pcb != NULL;
   new_pcb->exit_code = -1;
+
+  /* Initialize next untaken fd index */
+  new_pcb->fd_index = 3;
+  
+  /* Store running executable at ftd index 0 */
+  new_pcb->fdt[0] = NULL;
 
   char *token_copy, *save_ptr_copy;
   char file_copy[strlen(file_name) + 1];
@@ -145,8 +153,18 @@ static void start_process(void* file_name_) {
 
     success = load(process_name, &if_.eip, &if_.esp);
 
+    /* Added fpu code */
+    int FPU_SIZE = 108;
+    uint8_t fpu1[FPU_SIZE];
+    uint8_t init_fpu1[FPU_SIZE];
+    asm("fsave (%0); fninit; fsave (%1); frstor (%0)" : : "g"(&fpu1), "g"(&init_fpu1));
+    for (int i = 0; i < FPU_SIZE; i++) {
+      if_.st[i] = init_fpu1[i];
+    }
+    /* End of added fpu code */
+
     void* temp = if_.esp;
-    
+
     // copy strings onto stack
     for (int i = 0; i < argc; i++) {
       if_.esp -= strlen(token_list[i]) + 1;
@@ -240,6 +258,9 @@ void process_exit(void) {
     thread_exit();
     NOT_REACHED();
   }
+  
+  /* Close current running executable */
+  file_close(cur->pcb->fdt[0]);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -443,12 +464,13 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 
   /* Start address. */
   *eip = (void (*)(void))ehdr.e_entry;
-
   success = true;
 
 done:
   /* We arrive here whether the load is successful or not. */
-  file_close(file);
+  /* Prevent write operations to current executable */  
+  t->pcb->fdt[0] = file;
+  file_deny_write(t->pcb->fdt[0]);
   return success;
 }
 
