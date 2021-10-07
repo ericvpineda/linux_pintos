@@ -24,9 +24,12 @@
 static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
 
-struct shared_data {
-  char* fn;
-  struct wait_status *wait_info;
+// load_data struct is used to track successful loads in child threads
+struct load_data {
+  char* file_name;
+  struct wait_status *wait_status;
+  struct semaphore load_sema;
+  bool successful_load;
 };
 
 /* Initializes user programs in the system by ensuring the main
@@ -45,7 +48,7 @@ void userprog_init(void) {
   t->pcb = calloc(sizeof(struct process), 1);
   success = t->pcb != NULL;
 
-  /* Initialize list of children */
+  // initialize list of children
   list_init(&t->children);
 
   /* Kill the kernel if we did not succeed */
@@ -61,52 +64,60 @@ pid_t process_execute(const char* file_name) {
   tid_t tid;
   struct thread* t = thread_current();
 
-  t->process_info = malloc(sizeof(struct wait_status));
-
-  //sema_init(&temporary, 0);
-
-  sema_init(&t->process_info->sema, 1);
-  lock_init(&t->process_info->ref_cnt_lock);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page(0);
   strlcpy(fn_copy, file_name, PGSIZE);
-
-  struct shared_data *wrapper = malloc(sizeof(struct shared_data));
-  wrapper->fn = fn_copy;
-  wrapper->wait_info = t->process_info;
-
+  
   if (fn_copy == NULL)
     return TID_ERROR;
 
+
+  // create load data struct to pass into start_process
+  struct load_data *load_data = malloc(sizeof(struct load_data));
+  load_data->file_name = fn_copy;
+  sema_init(&load_data->load_sema, 0);
+
+  //sema_init(&temporary, 0);
+
+  /////////lock_init(&t->process_info->ref_cnt_lock);
+
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create(file_name, PRI_DEFAULT, start_process, (void*) wrapper);
-  sema_down(&t->process_info->sema);
-  if (tid == TID_ERROR)
+  tid = thread_create(fn_copy, PRI_DEFAULT, start_process, (void*) load_data);
+  
+  if (tid == TID_ERROR) {
     palloc_free_page(fn_copy);
+  } else {
+    // if thread successfully created, down loading semaphore
+    sema_down(&load_data->load_sema);
+    if (load_data->successful_load) {
+      // if load was successful, add wait status to the parent's children
+      list_push_back(&t->children, &load_data->wait_status->elem);
+    } else {
+      tid = TID_ERROR;
+      palloc_free_page (fn_copy);
+    }
+  }
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void start_process(void* file_name_) {
-  struct shared_data *file_data = (struct shared_data *) file_name_;
-  char* file_name = (char*)file_data->fn;
+  struct load_data *load_data = (struct load_data *) file_name_;
+  char* file_name = (char*) load_data->file_name;
   struct thread* t = thread_current();
   struct intr_frame if_;
   bool success, pcb_success;
-  struct wait_status *wait = file_data->wait_info;
-
-  wait->tid = t->tid;
-  wait->exit_code = -1;
-  wait->refs_count = 2;
+  
 
   /* Allocate process control block */
   struct process* new_pcb = malloc(sizeof(struct process));
 
+
   // initialize children list
   // list_init(&t->children);
-  list_push_back(&t->children, &wait->elem);
 
   success = pcb_success = new_pcb != NULL;
   new_pcb->exit_code = -1;
@@ -149,21 +160,7 @@ static void start_process(void* file_name_) {
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
 
-    lock_acquire(&wait->ref_cnt_lock);
-    // decrease ref count while child is locked
-    wait->refs_count--;
-    // if ref count is 0, remove from list and free
-    if (wait->refs_count == 0) {
-      list_remove(&wait->elem);
-      free(wait);
-    }
-
-    lock_release(&wait->ref_cnt_lock);
-
     success = load(process_name, &if_.eip, &if_.esp);
-    wait->exit_code = success ? 0 : -1;
-    if (success)
-      sema_up(&wait->sema);
 
     void* temp = if_.esp;
     
@@ -206,6 +203,20 @@ static void start_process(void* file_name_) {
     int fake_return = 0;
     if_.esp -= sizeof(void(*)(void));
     memcpy(if_.esp, &fake_return, sizeof(void(*)(void)));
+
+    t->wait_status = malloc(sizeof(struct wait_status));
+    load_data->wait_status = t->wait_status;
+
+    if (success) {
+      t->wait_status->refs_count = 2;
+      t->wait_status->exit_code = -1;
+      t->wait_status->tid = t->tid;
+      sema_init(&t->wait_status->sema, 0);
+      load_data->successful_load = true;
+    } else {
+      load_data->successful_load = false;
+    }
+
   }
 
   /* Handle failure with succesful PCB malloc. Must free the PCB */
@@ -218,15 +229,30 @@ static void start_process(void* file_name_) {
     free(pcb_to_free);
   }
 
+  sema_up(&load_data->load_sema);
+
+  ///////// lock_acquire(&wait->ref_cnt_lock);
+  // // decrease ref count while child is locked
+  // wait->refs_count--;
+  // // if ref count is 0, remove from list and free
+  // if (wait->refs_count == 0) {
+  //   list_remove(&wait->elem);
+  //   lock_release(&wait->ref_cnt_lock);
+  //   free(wait);
+  // } else {
+  //   lock_release(&wait->ref_cnt_lock);
+  // }
+
   /* Clean up. Exit on failure or jump to userspace */
   palloc_free_page(file_name);
-  free(file_data);
   if (!success) {
-    sema_up(&wait->sema);
+
     // free(wait);
     //sema_up(&temporary);
     thread_exit();
   }
+
+
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -252,9 +278,10 @@ int process_wait(pid_t child_pid) {
   struct list *thread_children = &curr_thread->children;
 
   struct wait_status *child = NULL;
+  struct wait_status *curr_child;
   struct list_elem *e;
   for (e = list_begin(thread_children); e != list_end(thread_children); e = list_next(e)) {
-    struct wait_status *curr_child = list_entry(e, struct wait_status, elem);
+    curr_child = list_entry(e, struct wait_status, elem);
     if (curr_child->tid == child_pid) {
       child = curr_child;
       break;
@@ -265,6 +292,7 @@ int process_wait(pid_t child_pid) {
   }
 
   sema_down(&child->sema);
+  list_remove(&child->elem);
 
   return child->exit_code;
   // sema_down(&temporary);
@@ -276,11 +304,14 @@ void process_exit(void) {
   struct thread* cur = thread_current();
   uint32_t* pd;
 
+
+
   /* If this thread does not have a PCB, don't worry */
   if (cur->pcb == NULL) {
     thread_exit();
     NOT_REACHED();
   }
+
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -308,37 +339,42 @@ void process_exit(void) {
   cur->pcb = NULL;
   free(pcb_to_free);
 
-  struct list *thread_children = &cur->children;
-  struct wait_status *child = NULL;
-  struct list_elem *e;
+  // struct list *thread_children = &cur->children;
+  // struct wait_status *child = NULL;
+  // struct list_elem *e;
 
-  for (e = list_begin(thread_children); e != list_end(thread_children); e = list_next(e)) {
-    child = list_entry(e, struct wait_status, elem);
-    lock_acquire(&child->ref_cnt_lock);
-    if (child->refs_count == 0) {
-      list_remove(&child->elem);
-      free(child);
-    } else {
-      child->refs_count--;
-    }
-    lock_release(&child->ref_cnt_lock);
-  }
 
-  lock_acquire(&cur->process_info->ref_cnt_lock);
-  // decrement ref count for this thread
-  cur->process_info->refs_count--;
+  // for (e = list_begin(thread_children); e != list_end(thread_children); e = list_next(e)) {
+  //   child = list_entry(e, struct wait_status, elem);
+  //   lock_acquire(&child->ref_cnt_lock);
+  //   if (child->refs_count == 0) {
+  //     list_remove(&child->elem);
+  //     free(child);
+  //   } else {
+  //     child->refs_count--;
+  //   }
+  //   lock_release(&child->ref_cnt_lock);
+  // }
+  
 
-  // free wait_status for this thread if ref count is 0
-  if (cur->process_info->refs_count == 0) {
-    list_remove(&cur->process_info->elem);
-    free(cur->process_info);
-  } else {
-    sema_up(&cur->process_info->sema);
-  }
+  // lock_acquire(&cur->process_info->ref_cnt_lock);
+  // // decrement ref count for this thread
+  // cur->process_info->refs_count--;
 
-  lock_release(&cur->process_info->ref_cnt_lock);
+  // // free wait_status for this thread if ref count is 0
+  // if (cur->process_info->refs_count == 0) {
+  //   list_remove(&cur->process_info->elem);
+  //   free(cur->process_info);
+  // } else {
+  //   sema_up(&cur->process_info->sema);
+  // }
+
+  // lock_release(&cur->process_info->ref_cnt_lock);
   
   // sema_up(&temporary);
+  if (cur->wait_status != NULL) {
+    sema_up(&cur->wait_status->sema);
+  }
 
   thread_exit();
 }
