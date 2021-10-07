@@ -123,7 +123,6 @@ static void start_process(void* file_name_) {
   // list_init(&t->children);
 
   success = pcb_success = new_pcb != NULL;
-  new_pcb->exit_code = -1;
 
   /* Initialize next untaken fd index */
   new_pcb->fd_index = 3;
@@ -351,7 +350,7 @@ void process_exit(void) {
     pagedir_destroy(pd);
   }
 
-  printf("%s: exit(%d)\n", thread_current()->pcb->process_name, thread_current()->pcb->exit_code);
+  printf("%s: exit(%d)\n", thread_current()->pcb->process_name, thread_current()->wait_status->exit_code);
 
   /* Free the PCB of this process and kill this thread
      Avoid race where PCB is freed before t->pcb is set to NULL
