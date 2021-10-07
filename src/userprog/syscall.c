@@ -79,9 +79,13 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Close -- Syscall */
   if (args[0] == SYS_CLOSE) {
     lock_acquire(&syscall_lock);
-    struct file *open_file_table = get_file(args);
-    if (open_file_table) {
-      file_close(open_file_table);
+    struct process* pcb = thread_current()->pcb;
+    size_t fd = (size_t) args[1];
+    int fd_index = pcb->fd_index;
+    
+    if (fd >= 3 && fd < fd_index && check_valid_location((void *) &fd, pcb)) {
+      struct file *open_file_table = get_file(args);
+      file_allow_write(open_file_table);
     }
     lock_release(&syscall_lock);
   }
@@ -303,8 +307,7 @@ struct file* get_file(uint32_t* args) {
 
 /* Check file_name valid location in vaddr && pagedir */
 bool check_valid_location (void *file_name, struct process *pcb) {
-  if (!is_user_vaddr(file_name) || 
-      !pagedir_get_page(pcb->pagedir, file_name)) {
+  if (!is_user_vaddr(file_name) || !pagedir_get_page(pcb->pagedir, file_name)) {
     return 0; 
   }
 
