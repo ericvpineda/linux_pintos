@@ -21,7 +21,7 @@
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
 
-static struct semaphore temporary;
+//static struct semaphore temporary;
 
 static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
@@ -230,6 +230,7 @@ static void start_process(void* file_name_) {
       t->wait_status->exit_code = -1;
       t->wait_status->tid = t->tid;
       sema_init(&t->wait_status->sema, 0);
+      lock_init(&t->wait_status->refs_lock);
       load_data->successful_load = true;
     } else {
       load_data->successful_load = false;
@@ -360,42 +361,36 @@ void process_exit(void) {
   cur->pcb = NULL;
   free(pcb_to_free);
 
+  
+  lock_acquire(&cur->wait_status->refs_lock);
+  cur->wait_status->refs_count--;
+  if (cur->wait_status->refs_count == 0) {
+    list_remove(&cur->wait_status->elem);
+    free(cur->wait_status);
+  }
+  lock_release(&cur->wait_status->refs_lock);
+
+  sema_up(&cur->wait_status->sema);
+
+
+  /// DEBUGGING WAIT SIMPLE HERE, CURRENTLY PAGE FAULTING
   // struct list *thread_children = &cur->children;
   // struct wait_status *child = NULL;
   // struct list_elem *e;
 
-
   // for (e = list_begin(thread_children); e != list_end(thread_children); e = list_next(e)) {
   //   child = list_entry(e, struct wait_status, elem);
-  //   lock_acquire(&child->ref_cnt_lock);
+  //   lock_acquire(&child->refs_lock);
+  //   child->refs_count--;
   //   if (child->refs_count == 0) {
   //     list_remove(&child->elem);
   //     free(child);
-  //   } else {
-  //     child->refs_count--;
   //   }
-  //   lock_release(&child->ref_cnt_lock);
-  // }
-  
-
-  // lock_acquire(&cur->process_info->ref_cnt_lock);
-  // // decrement ref count for this thread
-  // cur->process_info->refs_count--;
-
-  // // free wait_status for this thread if ref count is 0
-  // if (cur->process_info->refs_count == 0) {
-  //   list_remove(&cur->process_info->elem);
-  //   free(cur->process_info);
-  // } else {
-  //   sema_up(&cur->process_info->sema);
+  //   lock_release(&child->refs_lock);
   // }
 
-  // lock_release(&cur->process_info->ref_cnt_lock);
+
   
-  // sema_up(&temporary);
-  if (cur->wait_status != NULL) {
-    sema_up(&cur->wait_status->sema);
-  }
 
   thread_exit();
 }

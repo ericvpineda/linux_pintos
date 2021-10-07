@@ -30,7 +30,7 @@ struct wait_status {
    struct semaphore sema;
    int exit_code;
    int refs_count;
-   struct lock ref_cnt_lock;
+   struct lock refs_lock;
    struct list_elem elem;
 };
 
