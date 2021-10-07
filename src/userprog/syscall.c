@@ -166,7 +166,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     int fd_index = pcb->fd_index;
     int fd = (int) args[1];
     char *buffer = (char *) args[2];
-    off_t size = (off_t) args[3];
+    size_t size = (size_t) args[3];
 
     /* Check buffer correct location & buffer valid fd */
     if (fd == 1 || fd < 0 || fd >= fd_index || !check_valid_location((void *)buffer, pcb)) {
@@ -193,9 +193,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     /* Else read from open file table */
     struct file *file_name = get_file(args);
     if (file_name) {
-      off_t bytes_read = 0;
-      off_t total = 0;
-      while ((bytes_read = file_read(file_name, buffer, size))) {
+      size_t bytes_read = 0;
+      size_t total = 0;
+      while ((bytes_read = file_read(file_name, buffer, size - total))) {
         total += bytes_read;
       }
       f->eax = total;
@@ -236,7 +236,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     if (file_name) {
       off_t bytes_read = 0;
       off_t total = 0;
-      while ((bytes_read = file_write(file_name, buffer, size))) {
+      while ((bytes_read = file_write(file_name, buffer, size - total))) {
         total += bytes_read;
       }
       f->eax = total;
@@ -281,7 +281,8 @@ int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
 struct file* get_file(uint32_t* args) {
   int fd = (int) args[1];
   struct process* pcb = thread_current()->pcb;
-  if (fd < (pcb->fd_index) || fd >= 0) {
+  int unused_fd = (int) pcb->fd_index;
+  if (fd < unused_fd || fd >= 0) {
     return pcb->fdt[fd];
   }
   return NULL;

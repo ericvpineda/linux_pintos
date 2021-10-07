@@ -19,7 +19,9 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/syscall.h"
 
+// static struct lock executable_lock;
 static struct semaphore temporary;
 static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
@@ -29,6 +31,7 @@ static bool load(const char* file_name, void (**eip)(void), void** esp);
    the first user process. Any additions to the PCB should be also
    initialized here if main needs those members */
 void userprog_init(void) {
+  // lock_init(&executable_lock);
   struct thread* t = thread_current();
   bool success;
 
@@ -81,6 +84,9 @@ static void start_process(void* file_name_) {
 
   /* Initialize next untaken fd index */
   new_pcb->fd_index = 3;
+  
+  /* Store running executable at ftd index 0 */
+  new_pcb->fdt[0] = NULL;
 
   char *token_copy, *save_ptr_copy;
   char file_copy[strlen(file_name) + 1];
@@ -134,18 +140,6 @@ static void start_process(void* file_name_) {
 
     void* temp = if_.esp;
 
-    /* Added fpu code */
-    // int FPU_SIZE = 108;
-    // uint8_t fpu[FPU_SIZE];
-    // uint8_t init_fpu[FPU_SIZE];
-    // asm("fsave (%0); fninit; fsave (%1); frstor (%0)" : : "g"(&fpu), "g"(&init_fpu));
-    // for (int i = 0; i < FPU_SIZE; i++) {
-    //   if_.esp--;
-    //   strlcpy(if_.esp, init_fpu[i], 1);
-    // }
-    /* End of added fpu code */
-
-    
     // copy strings onto stack
     for (int i = 0; i < argc; i++) {
       if_.esp -= strlen(token_list[i]) + 1;
@@ -238,11 +232,9 @@ void process_exit(void) {
     thread_exit();
     NOT_REACHED();
   }
-
-  struct file *file = cur->pcb->fdt[0];
-  if (file != NULL) {
-    file_allow_write(file);
-  }
+  
+  /* Close current running executable */
+  file_close(cur->pcb->fdt[0]);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -446,16 +438,13 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 
   /* Start address. */
   *eip = (void (*)(void))ehdr.e_entry;
-
   success = true;
-
-   /* Prevent write operations to current executable */
-  t->pcb->fdt[0] = file;
-  file_deny_write(file);
 
 done:
   /* We arrive here whether the load is successful or not. */
-  file_close(file);
+  /* Prevent write operations to current executable */  
+  t->pcb->fdt[0] = file;
+  file_deny_write(t->pcb->fdt[0]);
   return success;
 }
 

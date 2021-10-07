@@ -31,6 +31,7 @@ struct process {
   int exit_code;              /* Exit code */
   struct file *fdt[128];      /* ADDED: File descriptor table */
   int fd_index;               /* ADDED: Next unused fd index */
+  struct file *executable;
 };
 
 void userprog_init(void);
