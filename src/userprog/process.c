@@ -67,8 +67,7 @@ pid_t process_execute(const char* file_name) {
   return tid;
 }
 
-/* A thread function that loads a user process and starts it
-   running. */
+/* A thread function that loads a user process and starts it running. */
 static void start_process(void* file_name_) {
   char* file_name = (char*)file_name_;
   struct thread* t = thread_current();
@@ -79,6 +78,9 @@ static void start_process(void* file_name_) {
   struct process* new_pcb = malloc(sizeof(struct process));
   success = pcb_success = new_pcb != NULL;
   new_pcb->exit_code = -1;
+
+  /* Initialize next untaken fd index */
+  new_pcb->fd_index = 3;
 
   char *token_copy, *save_ptr_copy;
   char file_copy[strlen(file_name) + 1];
@@ -131,6 +133,18 @@ static void start_process(void* file_name_) {
     /* End of added fpu code */
 
     void* temp = if_.esp;
+
+    /* Added fpu code */
+    // int FPU_SIZE = 108;
+    // uint8_t fpu[FPU_SIZE];
+    // uint8_t init_fpu[FPU_SIZE];
+    // asm("fsave (%0); fninit; fsave (%1); frstor (%0)" : : "g"(&fpu), "g"(&init_fpu));
+    // for (int i = 0; i < FPU_SIZE; i++) {
+    //   if_.esp--;
+    //   strlcpy(if_.esp, init_fpu[i], 1);
+    // }
+    /* End of added fpu code */
+
     
     // copy strings onto stack
     for (int i = 0; i < argc; i++) {
