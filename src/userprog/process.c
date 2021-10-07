@@ -31,7 +31,7 @@ struct load_data {
   char* file_name;
   struct wait_status *wait_status;
   struct semaphore load_sema;
-  bool successful_load;
+  bool loaded;
 };
 
 /* Initializes user programs in the system by ensuring the main
@@ -95,9 +95,18 @@ pid_t process_execute(const char* file_name) {
   } else {
     // if thread successfully created, down loading semaphore
     sema_down(&load_data->load_sema);
-    if (load_data->successful_load) {
+    if (load_data->loaded) {
       // if load was successful, add wait status to the parent's children
       list_push_back(&t->children, &load_data->wait_status->elem);
+
+      // lock_acquire(&load_data->wait_status->refs_lock);
+      // load_data->wait_status->refs_count--;
+      // lock_release(&load_data->wait_status->refs_lock);
+      // if (load_data->wait_status->refs_count == 0) {
+      //   list_remove(&load_data->wait_status->elem);
+      //   free(load_data->wait_status);
+      // }
+
     } else {
       tid = TID_ERROR;
       palloc_free_page (fn_copy);
@@ -231,10 +240,12 @@ static void start_process(void* file_name_) {
       t->wait_status->tid = t->tid;
       sema_init(&t->wait_status->sema, 0);
       lock_init(&t->wait_status->refs_lock);
-      load_data->successful_load = true;
+      load_data->loaded = true;
     } else {
-      load_data->successful_load = false;
+      load_data->loaded = false;
     }
+
+
 
   }
 
@@ -249,18 +260,6 @@ static void start_process(void* file_name_) {
   }
 
   sema_up(&load_data->load_sema);
-
-  ///////// lock_acquire(&wait->ref_cnt_lock);
-  // // decrease ref count while child is locked
-  // wait->refs_count--;
-  // // if ref count is 0, remove from list and free
-  // if (wait->refs_count == 0) {
-  //   list_remove(&wait->elem);
-  //   lock_release(&wait->ref_cnt_lock);
-  //   free(wait);
-  // } else {
-  //   lock_release(&wait->ref_cnt_lock);
-  // }
 
   /* Clean up. Exit on failure or jump to userspace */
   palloc_free_page(file_name);
@@ -309,11 +308,13 @@ int process_wait(pid_t child_pid) {
   if (child == NULL) {
     return -1;
   }
-
+  
   sema_down(&child->sema);
-  list_remove(&child->elem);
+  int exit_code = child->exit_code;
+  // list_remove(&child->elem);
+  // free(child);
 
-  return child->exit_code;
+  return exit_code;
   // sema_down(&temporary);
   // return 0;
 }
@@ -361,19 +362,21 @@ void process_exit(void) {
   cur->pcb = NULL;
   free(pcb_to_free);
 
-  
+  sema_up(&cur->wait_status->sema);
+
+
   lock_acquire(&cur->wait_status->refs_lock);
   cur->wait_status->refs_count--;
+  lock_release(&cur->wait_status->refs_lock);
   if (cur->wait_status->refs_count == 0) {
     list_remove(&cur->wait_status->elem);
     free(cur->wait_status);
   }
-  lock_release(&cur->wait_status->refs_lock);
 
-  sema_up(&cur->wait_status->sema);
+  
 
 
-  /// DEBUGGING WAIT SIMPLE HERE, CURRENTLY PAGE FAULTING
+  // / DEBUGGING WAIT SIMPLE HERE, CURRENTLY PAGE FAULTING
   // struct list *thread_children = &cur->children;
   // struct wait_status *child = NULL;
   // struct list_elem *e;
@@ -382,15 +385,13 @@ void process_exit(void) {
   //   child = list_entry(e, struct wait_status, elem);
   //   lock_acquire(&child->refs_lock);
   //   child->refs_count--;
+  //   lock_release(&child->refs_lock);
   //   if (child->refs_count == 0) {
   //     list_remove(&child->elem);
   //     free(child);
   //   }
-  //   lock_release(&child->refs_lock);
   // }
 
-
-  
 
   thread_exit();
 }
