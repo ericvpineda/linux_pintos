@@ -183,6 +183,17 @@ tid_t thread_create(const char* name, int priority, thread_func* function, void*
 
   /* Stack frame for switch_threads(). */
   sf = alloc_frame(t, sizeof *sf);
+
+  /* Added fpu code */
+  int FPU_SIZE = 108;
+  uint8_t fpu[FPU_SIZE];
+  uint8_t init_fpu[FPU_SIZE];
+  asm("fsave (%0); fninit; fsave (%1); frstor (%0)" : : "g"(&fpu), "g"(&init_fpu));
+  for (int i = 0; i < FPU_SIZE; i++) {
+    sf->st[i] = init_fpu[i];
+  }
+  /* End of added fpu code */
+  
   sf->eip = switch_entry;
   sf->ebp = 0;
 
