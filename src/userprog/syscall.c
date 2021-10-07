@@ -15,11 +15,14 @@
 #include "devices/input.h"
 #include <float.h>
 
-
+struct lock syscall_lock;
 
 /* Prototype functions */
 static void syscall_handler(struct intr_frame*);
-void syscall_init(void) { intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall"); }
+void syscall_init(void) { 
+  lock_init(&syscall_lock);
+  intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall"); 
+}
 int check_file_exists(char *file_name, struct process *pcb, int fd_index);
 struct file* get_file(uint32_t* fd);
 bool check_valid_location (void *file_name, struct process *pcb);
@@ -27,7 +30,6 @@ bool check_valid_location (void *file_name, struct process *pcb);
 /* Main syscall handler */
 static void syscall_handler(struct intr_frame* f UNUSED) {
   uint32_t* args = ((uint32_t*)f->esp);
-
   /*
    * The following print statement, if uncommented, will print out the syscall
    * number whenever a process enters a system call. You might find it useful
@@ -36,10 +38,11 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
    */
 
   /* printf("System call number: %d\n", args[0]); */
+  // if (args[0] == )
 
   /* Create -- syscall */
   if (args[0] == SYS_CREATE) {
-
+    lock_acquire(&syscall_lock);
     char *file_name = (char *)args[1];
     size_t file_size = (size_t)args[2];
     struct process* pcb = thread_current()->pcb;
@@ -48,59 +51,72 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     if (!check_valid_location((void *)file_name, pcb)) {
       f->eax = 0;
       thread_current()->pcb->exit_code = -1;
+      lock_release(&syscall_lock);
       return process_exit();
     }
 
     /* Check NULL, empty string file_name, file_name already exists */    
     if (!filesys_create(file_name, file_size)) {
       f->eax = 0;
-      return;
+    } else {
+      f->eax = 1;
     }
-    f->eax = 1;
+    lock_release(&syscall_lock);
   }
 
   /* Filesize -- Syscall */ 
   if (args[0] == SYS_FILESIZE) {
+    lock_acquire(&syscall_lock);
     struct file *open_file_table = get_file(args);
     if (open_file_table) {
       f->eax = file_length(open_file_table);
     }
+    lock_release(&syscall_lock);
   }
 
   /* Close -- Syscall */
   if (args[0] == SYS_CLOSE) {
+    lock_acquire(&syscall_lock);
     struct file *open_file_table = get_file(args);
     if (open_file_table) {
       file_close(open_file_table);
     }
+    lock_release(&syscall_lock);
   }
 
   /* Tell -- syscall */
   if (args[0] == SYS_TELL) {
+    lock_acquire(&syscall_lock);
     struct file *open_file_table = get_file(args);
     if (open_file_table) {
       off_t curr_byte_pos = file_tell(open_file_table);
       f->eax = curr_byte_pos;
     }
+    lock_release(&syscall_lock);
   }
 
   /* Seek -- syscall */
   if (args[0] == SYS_SEEK) {
+    lock_acquire(&syscall_lock);
     struct file *open_file_table = get_file(args);
     if (open_file_table) {
-      file_seek(open_file_table, args[1]);
+      file_seek(open_file_table, (off_t) args[2]);
     }
+    lock_release(&syscall_lock);
   }
 
   /* Remove -- syscall */
   if (args[0] == SYS_REMOVE) {
+    lock_acquire(&syscall_lock);
     char *file_name = (char *) args[1];
     bool res = filesys_remove(file_name);
     f->eax = !res ? 0 : 1;
+    lock_release(&syscall_lock);
   }
 
   /* Open -- syscall */
   if (args[0] == SYS_OPEN) {
+    lock_acquire(&syscall_lock);
     char *file_name = (char *) args[1];
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
@@ -108,9 +124,11 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     if (!check_valid_location((void *)file_name, pcb) || !file_name) {
       f->eax = 0;
       thread_current()->pcb->exit_code = -1;
+      lock_release(&syscall_lock);
       return process_exit();
     } else if (*file_name == '\0') {
       f->eax = -1;
+      lock_release(&syscall_lock);
       return;
     } 
 
@@ -119,6 +137,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     if (!open_file_table) {
       f->eax = -1;
       thread_current()->pcb->exit_code = 0;
+      lock_release(&syscall_lock);
       return;
     }
     
@@ -128,17 +147,21 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     /* Return fd to user process */
     f->eax = fd_index;
     pcb->fd_index++;
+    lock_release(&syscall_lock);
   }
 
   /* Exit -- syscall */
   if (args[0] == SYS_EXIT) {
+    lock_acquire(&syscall_lock);
     f->eax = args[1];
     thread_current()->pcb->exit_code = args[1];
+    lock_release(&syscall_lock);
     process_exit();
   }
 
   /* Read -- syscall */
   if (args[0] == SYS_READ) {
+    lock_acquire(&syscall_lock);
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
     int fd = (int) args[1];
@@ -149,6 +172,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     if (fd == 1 || fd < 0 || fd >= fd_index || !check_valid_location((void *)buffer, pcb)) {
       f->eax = -1;
       thread_current()->pcb->exit_code = -1;
+      lock_release(&syscall_lock);
       return process_exit();
     }
 
@@ -162,6 +186,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
         buffer[total] = typing_key;
       }
       f->eax = total;
+      lock_release(&syscall_lock);
       return;
     }
 
@@ -178,10 +203,12 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       /* File could not be read */
       f->eax = -1;
     }
+    lock_release(&syscall_lock);
   }
 
   /* Write -- syscall */
   if (args[0] == SYS_WRITE) {
+    lock_acquire(&syscall_lock);
     int fd = (int) args[1];
     char *buffer = (char *) args[2];
     off_t size = (off_t) args[3];
@@ -192,6 +219,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     if (fd <= 0 || fd >= fd_index || !check_valid_location((void *) buffer, pcb)) {
       f->eax = -1;
       thread_current()->pcb->exit_code = -1;
+      lock_release(&syscall_lock);
       return process_exit();
     }
 
@@ -199,6 +227,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     if (fd == 1) {
       putbuf((char*) args[2], args[3]);
       f->eax = args[3];
+      lock_release(&syscall_lock);
       return;
     }
     
@@ -207,7 +236,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     if (file_name) {
       off_t bytes_read = 0;
       off_t total = 0;
-      while (bytes_read = file_write(file_name, buffer, size)) {
+      while ((bytes_read = file_write(file_name, buffer, size))) {
         total += bytes_read;
       }
       f->eax = total;
@@ -215,18 +244,23 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       /* File could not be read */
       f->eax = -1;
     }
+    lock_release(&syscall_lock);
   }
 
   /* Practice -- syscall */
   if (args[0] == SYS_PRACTICE) {
+    lock_acquire(&syscall_lock);
     f->eax = args[1] + 1;
+    lock_release(&syscall_lock);
   }
 
   /* compute E -- syscall */
   if (args[0] == SYS_COMPUTE_E) {
+    lock_acquire(&syscall_lock);
     int e_value = (int) args[1];
     int res = sys_sum_to_e(e_value);
     f->eax = res; 
+    lock_release(&syscall_lock);
   }
 }
 

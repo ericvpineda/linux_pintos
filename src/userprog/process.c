@@ -239,6 +239,11 @@ void process_exit(void) {
     NOT_REACHED();
   }
 
+  struct file *file = cur->pcb->fdt[0];
+  if (file != NULL) {
+    file_allow_write(file);
+  }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pcb->pagedir;
@@ -443,6 +448,10 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   *eip = (void (*)(void))ehdr.e_entry;
 
   success = true;
+
+   /* Prevent write operations to current executable */
+  t->pcb->fdt[0] = file;
+  file_deny_write(file);
 
 done:
   /* We arrive here whether the load is successful or not. */
