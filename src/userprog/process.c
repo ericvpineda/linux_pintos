@@ -99,6 +99,12 @@ pid_t process_execute(const char* file_name) {
     if (load_data.loaded) {
       // if load was successful, add wait status to the parent's children
       list_push_back(&t->children, &load_data.wait_status->elem);
+
+      // struct wait_status *child = NULL;
+      // struct list_elem *e;
+      // for (e = list_begin(&t->children); e != list_end(&t->children); e = list_next(e)) {
+      //   child = list_entry(e, struct wait_status, elem);
+      // }
     } else {
       tid = TID_ERROR;
       palloc_free_page (fn_copy);
@@ -223,6 +229,9 @@ static void start_process(void* file_name_) {
     if_.esp -= sizeof(void(*)(void));
     memcpy(if_.esp, &fake_return, sizeof(void(*)(void)));
 
+
+    palloc_free_page(file_name);
+
     if (success) {
       load_data->loaded = true;
       t->wait_status = malloc(sizeof(struct wait_status));
@@ -232,15 +241,11 @@ static void start_process(void* file_name_) {
       t->wait_status->tid = t->tid;
       t->wait_status->already_waited = false;
       sema_init(&t->wait_status->sema, 0);
-      lock_init(&t->wait_status->refs_lock);
+      lock_init(&t->wait_status->refs_lock);   
     } else {
       load_data->loaded = false;
       t->wait_status->exit_code = -1;
-      thread_exit();
     }
-
-
-
   }
 
   /* Handle failure with succesful PCB malloc. Must free the PCB */
@@ -252,11 +257,11 @@ static void start_process(void* file_name_) {
     t->pcb = NULL;
     free(pcb_to_free);
   }
-
   sema_up(&load_data->load_sema);
 
+
   /* Clean up. Exit on failure or jump to userspace */
-  palloc_free_page(file_name);
+  
   if (!success) {
     //sema_up(&temporary);
     thread_exit();
@@ -378,8 +383,8 @@ void process_exit(void) {
   //   child->refs_count--;
   //   lock_release(&child->refs_lock);
   //   if (child->refs_count == 0) {
-  //     list_remove(&child->elem);
-  //     free(child);
+  //    list_remove(&child->elem);
+  //    free(child);
   //   }
   // }
 
