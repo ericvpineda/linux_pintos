@@ -286,11 +286,6 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   else if (args[0] == SYS_WAIT) {
     f->eax = process_wait(args[1]);
   }
-  else {
-    // args[0] is not a valid syscall number
-    thread_current()->wait_status->exit_code = -1;
-    return process_exit();
-  }
 }
 
 // HELPER METHODS
