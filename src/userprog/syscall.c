@@ -27,14 +27,18 @@ void syscall_init(void) {
 }
 int check_file_exists(char *file_name, struct process *pcb, int fd_index);
 struct file* get_file(uint32_t* fd);
-bool check_valid_location (void *file_name, struct process *pcb);
+bool check_valid_location (void *file_name);
 void validate_buffer(void *ptr, size_t size);
+void validate_pointer(void *ptr, size_t size);
+void validate_string(char *string);
 
 /* Main syscall handler */
 static void syscall_handler(struct intr_frame* f UNUSED) {
   uint32_t* args = ((uint32_t*)f->esp);
 
-  validate_buffer(args, sizeof(args) * sizeof(uint32_t));
+  //validate_buffer(args, sizeof(args) * sizeof(uint32_t));
+  validate_pointer(args, sizeof(uint32_t));
+  validate_pointer(&args[1], sizeof(args[1]));
   /*
    * The following print statement, if uncommented, will print out the syscall
    * number whenever a process enters a system call. You might find it useful
@@ -50,10 +54,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     lock_acquire(&syscall_lock);
     char *file_name = (char *)args[1];
     size_t file_size = (size_t)args[2];
-    struct process* pcb = thread_current()->pcb;
 
     /* Check each byte located in valid vaddr and pagedir */
-    if (!check_valid_location((void *)file_name, pcb)) {
+    if (!check_valid_location((void *)file_name)) {
       f->eax = 0;
       thread_current()->pcb->exit_code = -1;
       lock_release(&syscall_lock);
@@ -86,7 +89,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     int fd = args[1];
     int fd_index = pcb->fd_index;
     
-    if (fd >= 3 && fd < fd_index && check_valid_location((void *) &fd, pcb)) {
+    if (fd >= 3 && fd < fd_index && check_valid_location((void *) &fd)) {
       struct file *open_file_table = get_file(args);
       file_allow_write(open_file_table);
     }
@@ -130,7 +133,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
 
-    if (!check_valid_location((void *)file_name, pcb) || !file_name) {
+    if (!check_valid_location((void *)file_name) || !file_name) {
       f->eax = 0;
       thread_current()->pcb->exit_code = -1;
       lock_release(&syscall_lock);
@@ -178,7 +181,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     size_t size = (size_t) args[3];
 
     /* Check buffer correct location & buffer valid fd */
-    if (fd == 1 || fd < 0 || fd >= fd_index || !check_valid_location((void *)buffer, pcb)) {
+    if (fd == 1 || fd < 0 || fd >= fd_index || !check_valid_location((void *)buffer)) {
       f->eax = -1;
       thread_current()->pcb->exit_code = -1;
       lock_release(&syscall_lock);
@@ -225,7 +228,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     int fd_index = pcb->fd_index;
 
     /* Check invalid fd and vaddr/page locations */
-    if (fd <= 0 || fd >= fd_index || !check_valid_location((void *) buffer, pcb)) {
+    if (fd <= 0 || fd >= fd_index || !check_valid_location((void *) buffer)) {
       f->eax = -1;
       thread_current()->pcb->exit_code = -1;
       lock_release(&syscall_lock);
@@ -277,10 +280,16 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   }
 
   else if (args[0] == SYS_EXEC) {
+    validate_string((char*) args[1]);
     f->eax = process_execute((char*) args[1]);
   }
   else if (args[0] == SYS_WAIT) {
     f->eax = process_wait(args[1]);
+  }
+  else {
+    // args[0] is not a valid syscall number
+    thread_current()->wait_status->exit_code = -1;
+    return process_exit();
   }
 }
 
@@ -309,7 +318,8 @@ struct file* get_file(uint32_t* args) {
 }
 
 /* Check file_name valid location in vaddr && pagedir */
-bool check_valid_location (void *file_name, struct process *pcb) {
+bool check_valid_location (void *file_name) {
+  struct process* pcb = thread_current()->pcb;
   if (!is_user_vaddr(file_name) || !pagedir_get_page(pcb->pagedir, file_name)) {
     return 0; 
   }
@@ -317,23 +327,41 @@ bool check_valid_location (void *file_name, struct process *pcb) {
   return 1;
 }
 
+/* Validates buffer by exiting with code -1 if buffer maps to invalid pg or its contents are not in user space */
+// void validate_buffer(void *ptr, size_t size) {
+//   while (size > 0) {
+//     if (!check_valid_location(ptr)) {
+//       thread_current()->wait_status->exit_code = -1;
+//       return process_exit();
+//     }
+//     size_t bytes_validated;
+//     size_t page_remaining = PGSIZE - pg_ofs(ptr);
+
+//     if (page_remaining > size) {
+//       bytes_validated = size;
+//     } else {
+//       bytes_validated = page_remaining;
+//     }
+//     ptr += bytes_validated;
+//     size -= bytes_validated; 
+//   }
+// }
+
 /* Validates ptr by exiting with code -1 if ptr is an invalid memory addr or invalid pointer */
-void validate_buffer(void *ptr, size_t size) {
-  struct process* pcb = thread_current()->pcb;
-  while (size > 0) {
-    if (!check_valid_location(ptr, pcb)) {
+void validate_pointer(void *ptr, size_t size) {
+  if (!check_valid_location(ptr) || !check_valid_location(ptr + size)) {
+    thread_current()->wait_status->exit_code = -1;
+    return process_exit();
+  }
+}
+
+/* Validates string by exiting with code -1 if string maps to invalid pg or its contents are not in user space */
+void validate_string(char *string) {
+  if (is_user_vaddr(string)) {
+    char *pg = pagedir_get_page(thread_current()->pcb->pagedir, string);
+    if (pg == NULL || !check_valid_location(string + strlen(pg) + 1)) {
       thread_current()->wait_status->exit_code = -1;
       return process_exit();
     }
-    size_t bytes_validated;
-    size_t page_remaining = PGSIZE - pg_ofs(ptr);
-
-    if (page_remaining > size) {
-      bytes_validated = size;
-    } else {
-      bytes_validated = page_remaining;
-    }
-    ptr += bytes_validated;
-    size -= bytes_validated; 
   }
 }
