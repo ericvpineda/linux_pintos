@@ -178,7 +178,6 @@ static void start_process(void* file_name_) {
     success = load(process_name, &if_.eip, &if_.esp);
     if (!success) {
       load_data->loaded = false;
-      t->wait_status->exit_code = -1;
       sema_up(&load_data->load_sema);
       thread_exit();
     }
@@ -571,7 +570,8 @@ done:
   /* We arrive here whether the load is successful or not. */
   /* Prevent write operations to current executable */  
   t->pcb->fdt[0] = file;
-  file_deny_write(t->pcb->fdt[0]);
+  if (success)
+    file_deny_write(t->pcb->fdt[0]);
   return success;
 }
 
