@@ -85,8 +85,6 @@ pid_t process_execute(const char* file_name) {
   load_data.file_name = fn_copy;
   sema_init(&load_data.load_sema, 0);
 
-  //sema_init(&temporary, 0);
-
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create(fn_copy, PRI_DEFAULT, start_process, (void*) &load_data);
@@ -178,7 +176,6 @@ static void start_process(void* file_name_) {
     success = load(process_name, &if_.eip, &if_.esp);
     if (!success) {
       load_data->loaded = false;
-      t->wait_status->exit_code = -1;
       sema_up(&load_data->load_sema);
       thread_exit();
     }
@@ -334,6 +331,12 @@ void process_exit(void) {
   
   /* Close current running executable */
   file_close(cur->pcb->fdt[0]);
+  
+  // for (unsigned int i = 0; i < sizeof(cur->pcb->fdt) / sizeof(cur->pcb->fdt[0]); i++) {
+  //   file_close(cur->pcb->fdt[i]);
+  //   free(cur->pcb->fdt[i]);
+  // }
+  // free(cur->pcb->fdt);
 
 
   /* Destroy the current process's page directory and switch back
@@ -373,22 +376,18 @@ void process_exit(void) {
     free(cur->wait_status);
   }
 
-  
-
-
-  // // DEBUGGING WAIT SIMPLE HERE, CURRENTLY PAGE FAULTING
-  // struct wait_status *child = NULL;
-  // struct list_elem *e;
-  // for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
-  //   child = list_entry(e, struct wait_status, elem);
-  //   lock_acquire(&child->refs_lock);
-  //   child->refs_count--;
-  //   lock_release(&child->refs_lock);
-  //   if (child->refs_count == 0) {
-  //    list_remove(&child->elem);
-  //    free(child);
-  //   }
-  // }
+  struct wait_status *child = NULL;
+  struct list_elem *e;
+  for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
+    child = list_entry(e, struct wait_status, elem);
+    lock_acquire(&child->refs_lock);
+    child->refs_count--;
+    lock_release(&child->refs_lock);
+    if (child->refs_count == 0) {
+     list_remove(&child->elem);
+     free(child);
+    }
+  }
 
 
   thread_exit();
@@ -571,7 +570,9 @@ done:
   /* We arrive here whether the load is successful or not. */
   /* Prevent write operations to current executable */  
   t->pcb->fdt[0] = file;
-  file_deny_write(t->pcb->fdt[0]);
+  if (success) {
+    file_deny_write(t->pcb->fdt[0]);
+  }
   return success;
 }
 
