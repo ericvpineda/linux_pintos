@@ -32,6 +32,7 @@ struct wait_status {
    int refs_count;
    struct lock refs_lock;
    struct list_elem elem;
+   bool already_waited;
 };
 
 /* A kernel thread or user process.

@@ -51,6 +51,9 @@ void userprog_init(void) {
   t->pcb = calloc(sizeof(struct process), 1);
   success = t->pcb != NULL;
 
+  //    // initialize list of children
+  // list_init(&t->children);
+
 
   /* Kill the kernel if we did not succeed */
   ASSERT(success);
@@ -73,40 +76,29 @@ pid_t process_execute(const char* file_name) {
   if (fn_copy == NULL)
     return TID_ERROR;
 
-    // initialize list of children
+  // initialize list of children
   list_init(&t->children);
 
 
   // create load data struct to pass into start_process
-  struct load_data *load_data = malloc(sizeof(struct load_data));
-  load_data->file_name = fn_copy;
-  sema_init(&load_data->load_sema, 0);
+  struct load_data load_data;
+  load_data.file_name = fn_copy;
+  sema_init(&load_data.load_sema, 0);
 
   //sema_init(&temporary, 0);
 
-  /////////lock_init(&t->process_info->ref_cnt_lock);
-
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create(fn_copy, PRI_DEFAULT, start_process, (void*) load_data);
+  tid = thread_create(fn_copy, PRI_DEFAULT, start_process, (void*) &load_data);
   
   if (tid == TID_ERROR) {
     palloc_free_page(fn_copy);
   } else {
     // if thread successfully created, down loading semaphore
-    sema_down(&load_data->load_sema);
-    if (load_data->loaded) {
+    sema_down(&load_data.load_sema);
+    if (load_data.loaded) {
       // if load was successful, add wait status to the parent's children
-      list_push_back(&t->children, &load_data->wait_status->elem);
-
-      // lock_acquire(&load_data->wait_status->refs_lock);
-      // load_data->wait_status->refs_count--;
-      // lock_release(&load_data->wait_status->refs_lock);
-      // if (load_data->wait_status->refs_count == 0) {
-      //   list_remove(&load_data->wait_status->elem);
-      //   free(load_data->wait_status);
-      // }
-
+      list_push_back(&t->children, &load_data.wait_status->elem);
     } else {
       tid = TID_ERROR;
       palloc_free_page (fn_copy);
@@ -231,18 +223,20 @@ static void start_process(void* file_name_) {
     if_.esp -= sizeof(void(*)(void));
     memcpy(if_.esp, &fake_return, sizeof(void(*)(void)));
 
-    t->wait_status = malloc(sizeof(struct wait_status));
-    load_data->wait_status = t->wait_status;
-
     if (success) {
+      load_data->loaded = true;
+      t->wait_status = malloc(sizeof(struct wait_status));
+      load_data->wait_status = t->wait_status;
       t->wait_status->refs_count = 2;
       t->wait_status->exit_code = -1;
       t->wait_status->tid = t->tid;
+      t->wait_status->already_waited = false;
       sema_init(&t->wait_status->sema, 0);
       lock_init(&t->wait_status->refs_lock);
-      load_data->loaded = true;
     } else {
       load_data->loaded = false;
+      t->wait_status->exit_code = -1;
+      thread_exit();
     }
 
 
@@ -264,8 +258,6 @@ static void start_process(void* file_name_) {
   /* Clean up. Exit on failure or jump to userspace */
   palloc_free_page(file_name);
   if (!success) {
-
-    // free(wait);
     //sema_up(&temporary);
     thread_exit();
   }
@@ -305,10 +297,11 @@ int process_wait(pid_t child_pid) {
       break;
     }
   }
-  if (child == NULL) {
+  if (child == NULL || child->already_waited) {
     return -1;
   }
   
+  child->already_waited = true;
   sema_down(&child->sema);
   int exit_code = child->exit_code;
   list_remove(&child->elem);
@@ -376,12 +369,10 @@ void process_exit(void) {
   
 
 
-  // / DEBUGGING WAIT SIMPLE HERE, CURRENTLY PAGE FAULTING
-  // struct list *thread_children = &cur->children;
+  // // DEBUGGING WAIT SIMPLE HERE, CURRENTLY PAGE FAULTING
   // struct wait_status *child = NULL;
   // struct list_elem *e;
-
-  // for (e = list_begin(thread_children); e != list_end(thread_children); e = list_next(e)) {
+  // for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
   //   child = list_entry(e, struct wait_status, elem);
   //   lock_acquire(&child->refs_lock);
   //   child->refs_count--;
