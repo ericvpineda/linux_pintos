@@ -570,9 +570,8 @@ done:
   /* We arrive here whether the load is successful or not. */
   /* Prevent write operations to current executable */  
   t->pcb->fdt[0] = file;
-  if (success) {
+  if (success)
     file_deny_write(t->pcb->fdt[0]);
-  }
   return success;
 }
 
