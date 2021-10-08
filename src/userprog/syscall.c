@@ -28,10 +28,13 @@ void syscall_init(void) {
 int check_file_exists(char *file_name, struct process *pcb, int fd_index);
 struct file* get_file(uint32_t* fd);
 bool check_valid_location (void *file_name, struct process *pcb);
+void validate_buffer(void *ptr, size_t size);
 
 /* Main syscall handler */
 static void syscall_handler(struct intr_frame* f UNUSED) {
   uint32_t* args = ((uint32_t*)f->esp);
+
+  validate_buffer(args, sizeof(args) * sizeof(uint32_t));
   /*
    * The following print statement, if uncommented, will print out the syscall
    * number whenever a process enters a system call. You might find it useful
@@ -255,12 +258,6 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
   /* Practice -- syscall */
   if (args[0] == SYS_PRACTICE) {
-    // struct process* pcb = thread_current()->pcb;
-    // if (!check_valid_location((void *)args[1], pcb)) {
-    //   f->eax = 0;
-    //   thread_current()->pcb->exit_code = -1;
-    //   return process_exit();
-    // }
     lock_acquire(&syscall_lock);
     f->eax = args[1] + 1;
     lock_release(&syscall_lock);
@@ -280,21 +277,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   }
 
   else if (args[0] == SYS_EXEC) {
-    // struct process* pcb = thread_current()->pcb;
-    // if (!check_valid_location((void *)args[1], pcb)) {
-    //   f->eax = -1;
-    //   thread_current()->pcb->exit_code = -1;
-    //   return process_exit();
-    // }
     f->eax = process_execute((char*) args[1]);
   }
   else if (args[0] == SYS_WAIT) {
-    // struct process* pcb = thread_current()->pcb;
-    // if (!check_valid_location((void *)args[1], pcb)) {
-    //   f->eax = -1;
-    //   thread_current()->pcb->exit_code = -1;
-    //   return process_exit();
-    // }
     f->eax = process_wait(args[1]);
   }
 }
@@ -330,4 +315,24 @@ bool check_valid_location (void *file_name, struct process *pcb) {
   }
 
   return 1;
+}
+
+void validate_buffer(void *ptr, size_t size) {
+  struct process* pcb = thread_current()->pcb;
+  while (size > 0) {
+    if (!check_valid_location(ptr, pcb)) {
+      thread_current()->wait_status->exit_code = -1;
+      return process_exit();
+    }
+    size_t bytes_validated;
+    size_t page_remaining = PGSIZE - pg_ofs(ptr);
+
+    if (page_remaining > size) {
+      bytes_validated = size;
+    } else {
+      bytes_validated = page_remaining;
+    }
+    ptr += bytes_validated;
+    size -= bytes_validated; 
+  }
 }
