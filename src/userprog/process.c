@@ -51,8 +51,8 @@ void userprog_init(void) {
   t->pcb = calloc(sizeof(struct process), 1);
   success = t->pcb != NULL;
 
-  //    // initialize list of children
-  // list_init(&t->children);
+     // initialize list of children
+  list_init(&t->children);
 
 
   /* Kill the kernel if we did not succeed */
@@ -77,7 +77,7 @@ pid_t process_execute(const char* file_name) {
     return TID_ERROR;
 
   // initialize list of children
-  list_init(&t->children);
+  // list_init(&t->children);
 
 
   // create load data struct to pass into start_process
@@ -127,7 +127,7 @@ static void start_process(void* file_name_) {
 
 
   // initialize children list
-  // list_init(&t->children);
+  list_init(&t->children);
 
   success = pcb_success = new_pcb != NULL;
 
