@@ -317,6 +317,7 @@ bool check_valid_location (void *file_name, struct process *pcb) {
   return 1;
 }
 
+/* Validates ptr by exiting with code -1 if ptr is an invalid memory addr or invalid pointer */
 void validate_buffer(void *ptr, size_t size) {
   struct process* pcb = thread_current()->pcb;
   while (size > 0) {

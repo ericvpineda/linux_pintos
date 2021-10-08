@@ -176,6 +176,12 @@ static void start_process(void* file_name_) {
     if_.eflags = FLAG_IF | FLAG_MBS;
 
     success = load(process_name, &if_.eip, &if_.esp);
+    if (!success) {
+      load_data->loaded = false;
+      t->wait_status->exit_code = -1;
+      sema_up(&load_data->load_sema);
+      thread_exit();
+    }
 
     /* Added fpu code */
     int FPU_SIZE = 108;
@@ -232,20 +238,16 @@ static void start_process(void* file_name_) {
 
     palloc_free_page(file_name);
 
-    if (success) {
-      load_data->loaded = true;
-      t->wait_status = malloc(sizeof(struct wait_status));
-      load_data->wait_status = t->wait_status;
-      t->wait_status->refs_count = 2;
-      t->wait_status->exit_code = -1;
-      t->wait_status->tid = t->tid;
-      t->wait_status->already_waited = false;
-      sema_init(&t->wait_status->sema, 0);
-      lock_init(&t->wait_status->refs_lock);   
-    } else {
-      load_data->loaded = false;
-      t->wait_status->exit_code = -1;
-    }
+    load_data->loaded = true;
+    t->wait_status = malloc(sizeof(struct wait_status));
+    load_data->wait_status = t->wait_status;
+    t->wait_status->refs_count = 2;
+    t->wait_status->exit_code = -1;
+    t->wait_status->tid = t->tid;
+    t->wait_status->already_waited = false;
+    sema_init(&t->wait_status->sema, 0);
+    lock_init(&t->wait_status->refs_lock);   
+    sema_up(&load_data->load_sema);
   }
 
   /* Handle failure with succesful PCB malloc. Must free the PCB */
@@ -257,15 +259,15 @@ static void start_process(void* file_name_) {
     t->pcb = NULL;
     free(pcb_to_free);
   }
-  sema_up(&load_data->load_sema);
+  
 
 
   /* Clean up. Exit on failure or jump to userspace */
   
-  if (!success) {
-    //sema_up(&temporary);
-    thread_exit();
-  }
+  // if (!success) {
+  //   //sema_up(&temporary);
+  //   thread_exit();
+  // }
 
 
 
