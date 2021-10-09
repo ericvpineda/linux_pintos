@@ -154,10 +154,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
     
     /* Else create file */
-    // list_push_back(fdt, open_file_table);
     pcb->fdt[fd_index] = open_file_table;
     pcb->fdt[fd_index]->name = file_name;
-    // pcb->fdt->open_file_table->name = file_name;
+    
     /* Return fd to user process */
     f->eax = fd_index;
     pcb->fd_index++;

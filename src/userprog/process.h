@@ -30,7 +30,6 @@ struct process {
   struct thread* main_thread; /* Pointer to main thread */
   int exit_code;              /* ADDED: Exit code */
   struct file *fdt[128];      /* ADDED: File descriptor table */
-  //struct list *fdt;      /* ADDED: File descriptor table */
   int fd_index;               /* ADDED: Next unused fd index */
 };
 
