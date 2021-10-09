@@ -25,7 +25,7 @@ void syscall_init(void) {
   lock_init(&syscall_lock);
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall"); 
 }
-int check_file_exists(char *file_name, struct process *pcb, int fd_index);
+//int check_file_exists(char *file_name, struct process *pcb, int fd_index);
 struct file* get_file(uint32_t* fd);
 bool check_valid_location (void *file_name);
 void validate_buffer(void *ptr, size_t size);
@@ -154,8 +154,10 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
     
     /* Else create file */
+    // list_push_back(fdt, open_file_table);
     pcb->fdt[fd_index] = open_file_table;
     pcb->fdt[fd_index]->name = file_name;
+    // pcb->fdt->open_file_table->name = file_name;
     /* Return fd to user process */
     f->eax = fd_index;
     pcb->fd_index++;
@@ -290,16 +292,16 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
 // HELPER METHODS
 
-/* Check file exists in process fdt */
-int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
-  for (int i=3; i < fd_index; i++) {
-    char *pcb_file = pcb->fdt[i]->name;
-    if (!strcmp(file_name, pcb_file)) {
-      return 1; 
-    }
-  }
-  return 0;
-}
+// /* Check file exists in process fdt */
+// int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
+//   for (int i=3; i < fd_index; i++) {
+//     char *pcb_file = pcb->fdt[i]->name;
+//     if (!strcmp(file_name, pcb_file)) {
+//       return 1; 
+//     }
+//   }
+//   return 0;
+// }
 
 /* Get file associated with fd */
 struct file* get_file(uint32_t* args) {

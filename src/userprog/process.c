@@ -135,7 +135,7 @@ static void start_process(void* file_name_) {
   new_pcb->fd_index = 3;
   
   /* Store running executable at ftd index 0 */
-  new_pcb->fdt[0] = NULL;
+  // new_pcb->fdt[0] = NULL;
 
   char *token_copy, *save_ptr_copy;
   char file_copy[strlen(file_name) + 1];
@@ -519,6 +519,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
     goto done;
   }
 
+  // list_push_back(t->pcb->fdt, file);
   t->pcb->fdt[0] = file;
   file_deny_write(file);
   
