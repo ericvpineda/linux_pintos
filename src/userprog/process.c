@@ -51,7 +51,7 @@ void userprog_init(void) {
   t->pcb = calloc(sizeof(struct process), 1);
   success = t->pcb != NULL;
 
-     // initialize list of children
+  // initialize list of children
   list_init(&t->children);
 
 
@@ -97,17 +97,19 @@ pid_t process_execute(const char* file_name) {
     if (load_data.loaded) {
       // if load was successful, add wait status to the parent's children
       list_push_back(&t->children, &load_data.wait_status->elem);
-
-      // struct wait_status *child = NULL;
-      // struct list_elem *e;
-      // for (e = list_begin(&t->children); e != list_end(&t->children); e = list_next(e)) {
-      //   child = list_entry(e, struct wait_status, elem);
-      // }
     } else {
+      palloc_free_page(fn_copy);
       tid = TID_ERROR;
-      palloc_free_page (fn_copy);
     }
   }
+  // if (tid != TID_ERROR) {
+  //   sema_down(&load_data.load_sema);
+  //   if (load_data.loaded) {
+  //     // if load was successful, add wait status to the parent's children
+  //     list_push_back(&t->children, &load_data.wait_status->elem);
+  //   } 
+  // }
+  // palloc_free_page(fn_copy);
   return tid;
 }
 
@@ -124,7 +126,7 @@ static void start_process(void* file_name_) {
   struct process* new_pcb = malloc(sizeof(struct process));
 
 
-  // initialize children list
+  // initialize children list for current thread
   list_init(&t->children);
 
   success = pcb_success = new_pcb != NULL;
@@ -147,12 +149,15 @@ static void start_process(void* file_name_) {
   char *token, *save_ptr;
   char *token_list[argc];
   int i = argc - 1;
+  int tokens_start;
   for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
     token_list[i] = (char*) malloc(strlen(token) + 1);
     strlcpy(token_list[i], token, strlen(token) + 1);
+    tokens_start = i;
     i--;
   }
   char* process_name = token_list[argc - 1];
+  palloc_free_page(file_name);
 
   /* Initialize process control block */
   if (success) {
@@ -174,7 +179,21 @@ static void start_process(void* file_name_) {
     if_.eflags = FLAG_IF | FLAG_MBS;
 
     success = load(process_name, &if_.eip, &if_.esp);
+
+    /* Handle failure with succesful PCB malloc. Must free the PCB */
+    if (!success && pcb_success) {
+      // Avoid race where PCB is freed before t->pcb is set to NULL
+      // If this happens, then an unfortuantely timed timer interrupt
+      // can try to activate the pagedir, but it is now freed memory
+      struct process* pcb_to_free = t->pcb;
+      t->pcb = NULL;
+      free(pcb_to_free);
+    }
+
     if (!success) {
+      for (int i = argc - 1; i >= tokens_start; i--) {
+        free(token_list[i]);
+      }
       load_data->loaded = false;
       sema_up(&load_data->load_sema);
       thread_exit();
@@ -215,6 +234,8 @@ static void start_process(void* file_name_) {
       if_.esp -= sizeof(void*);
       temp -= strlen(token_list[i]) + 1;
       memcpy(if_.esp, &temp, sizeof(void*));
+    }
+    for (int i = argc - 1; i >= tokens_start; i--) {
       free(token_list[i]);
     }
 
@@ -232,9 +253,6 @@ static void start_process(void* file_name_) {
     if_.esp -= sizeof(void(*)(void));
     memcpy(if_.esp, &fake_return, sizeof(void(*)(void)));
 
-
-    palloc_free_page(file_name);
-
     load_data->loaded = true;
     t->wait_status = malloc(sizeof(struct wait_status));
     load_data->wait_status = t->wait_status;
@@ -245,16 +263,6 @@ static void start_process(void* file_name_) {
     sema_init(&t->wait_status->sema, 0);
     lock_init(&t->wait_status->refs_lock);   
     sema_up(&load_data->load_sema);
-  }
-
-  /* Handle failure with succesful PCB malloc. Must free the PCB */
-  if (!success && pcb_success) {
-    // Avoid race where PCB is freed before t->pcb is set to NULL
-    // If this happens, then an unfortuantely timed timer interrupt
-    // can try to activate the pagedir, but it is now freed memory
-    struct process* pcb_to_free = t->pcb;
-    t->pcb = NULL;
-    free(pcb_to_free);
   }
   
 
@@ -330,13 +338,17 @@ void process_exit(void) {
   }
   
   /* Close current running executable */
-  file_close(cur->pcb->fdt[0]);
+  //file_close(cur->pcb->fdt[0]);
   
+  // close all files in the file descriptor table
+  // for (int i = 0; i < cur->pcb->fd_index; i++) {
+  //   file_close(cur->pcb->fdt[i]);
+  // }
   // for (unsigned int i = 0; i < sizeof(cur->pcb->fdt) / sizeof(cur->pcb->fdt[0]); i++) {
   //   file_close(cur->pcb->fdt[i]);
-  //   free(cur->pcb->fdt[i]);
   // }
-  // free(cur->pcb->fdt);
+  //free(cur->pcb->fdt);
+
 
 
   /* Destroy the current process's page directory and switch back
@@ -376,17 +388,24 @@ void process_exit(void) {
     free(cur->wait_status);
   }
 
+  // struct wait_status *child = NULL;
+  // struct list_elem *e;
+  // for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
+  //   child = list_entry(e, struct wait_status, elem);
+  //   lock_acquire(&child->refs_lock);
+  //   child->refs_count--;
+  //   lock_release(&child->refs_lock);
+  //   if (child->refs_count == 0) {
+  //    list_remove(&child->elem);
+  //    free(child);
+  //   }
+  // }
   struct wait_status *child = NULL;
   struct list_elem *e;
   for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
     child = list_entry(e, struct wait_status, elem);
-    lock_acquire(&child->refs_lock);
-    child->refs_count--;
-    lock_release(&child->refs_lock);
-    if (child->refs_count == 0) {
-     list_remove(&child->elem);
-     free(child);
-    }
+    list_remove(&child->elem);
+    free(child);
   }
 
 
@@ -500,6 +519,11 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
     goto done;
   }
 
+  t->pcb->fdt[0] = file;
+  file_deny_write(file);
+  
+
+
   /* Read and verify executable header. */
   if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
       memcmp(ehdr.e_ident, "\177ELF\1\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 3 ||
@@ -568,10 +592,8 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 
 done:
   /* We arrive here whether the load is successful or not. */
-  /* Prevent write operations to current executable */  
-  t->pcb->fdt[0] = file;
-  if (success)
-    file_deny_write(t->pcb->fdt[0]);
+  /* Prevent write operations to current executable */ 
+  file_close(file); 
   return success;
 }
 
