@@ -338,7 +338,7 @@ void process_exit(void) {
   }
   
   /* Close current running executable */
-  //file_close(cur->pcb->fdt[0]);
+  file_close(cur->pcb->fdt[0]);
   
   // close all files in the file descriptor table
   // for (int i = 0; i < cur->pcb->fd_index; i++) {
@@ -593,7 +593,6 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 done:
   /* We arrive here whether the load is successful or not. */
   /* Prevent write operations to current executable */ 
-  file_close(file); 
   return success;
 }
 
