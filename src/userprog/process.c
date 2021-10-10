@@ -21,12 +21,10 @@
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
 
-//static struct semaphore temporary;
-
 static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
 
-// load_data struct is used to track successful loads in child threads
+/* load_data struct is used to track successful loads in child threads */
 struct load_data {
   char* file_name;
   struct wait_status *wait_status;
@@ -39,7 +37,6 @@ struct load_data {
    the first user process. Any additions to the PCB should be also
    initialized here if main needs those members */
 void userprog_init(void) {
-  // lock_init(&executable_lock);
   struct thread* t = thread_current();
   bool success;
 
@@ -51,9 +48,8 @@ void userprog_init(void) {
   t->pcb = calloc(sizeof(struct process), 1);
   success = t->pcb != NULL;
 
-  // initialize list of children
+  /* Initialize list of children */
   list_init(&t->children);
-
 
   /* Kill the kernel if we did not succeed */
   ASSERT(success);
@@ -76,15 +72,10 @@ pid_t process_execute(const char* file_name) {
   if (fn_copy == NULL)
     return TID_ERROR;
 
-  // initialize list of children
-  // list_init(&t->children);
-
-
-  // create load data struct to pass into start_process
+  /* Create load data struct to pass into start_process */
   struct load_data load_data;
   load_data.file_name = fn_copy;
   sema_init(&load_data.load_sema, 0);
-
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create(fn_copy, PRI_DEFAULT, start_process, (void*) &load_data);
@@ -102,14 +93,7 @@ pid_t process_execute(const char* file_name) {
       tid = TID_ERROR;
     }
   }
-  // if (tid != TID_ERROR) {
-  //   sema_down(&load_data.load_sema);
-  //   if (load_data.loaded) {
-  //     // if load was successful, add wait status to the parent's children
-  //     list_push_back(&t->children, &load_data.wait_status->elem);
-  //   } 
-  // }
-  // palloc_free_page(fn_copy);
+
   return tid;
 }
 
@@ -121,12 +105,10 @@ static void start_process(void* file_name_) {
   struct intr_frame if_;
   bool success, pcb_success;
   
-
   /* Allocate process control block */
   struct process* new_pcb = malloc(sizeof(struct process));
 
-
-  // initialize children list for current thread
+  /* Initialize children list for current thread */
   list_init(&t->children);
 
   success = pcb_success = new_pcb != NULL;
@@ -135,15 +117,16 @@ static void start_process(void* file_name_) {
    - fd_index 0, 1, 2 = stdin, stdout, stderr (if applicable) */
   new_pcb->fd_index = 3;
 
-  /* Set all pointers to fdt to NULL */
+  /* Set all pointers in file descriptor table to NULL */
   for (int i=0; i < 128; i++) {
     new_pcb->fdt[i] = NULL;
   }
 
-  char *token_copy, *save_ptr_copy;
+  /* Parse string arguments seperated by spaces */
   char file_copy[strlen(file_name) + 1];
   strlcpy(file_copy, file_name, strlen(file_name) + 1);
 
+  char *token_copy, *save_ptr_copy;
   int argc = 0;
   for (token_copy = strtok_r(file_copy, " ", &save_ptr_copy); token_copy != NULL; token_copy = strtok_r (NULL, " ", &save_ptr_copy)) {
     argc++;
@@ -202,7 +185,7 @@ static void start_process(void* file_name_) {
       thread_exit();
     }
 
-    /* Added fpu code */
+    /* Added FPU code */
     int FPU_SIZE = 108;
     uint8_t fpu1[FPU_SIZE];
     uint8_t init_fpu1[FPU_SIZE];
@@ -210,17 +193,17 @@ static void start_process(void* file_name_) {
     for (int i = 0; i < FPU_SIZE; i++) {
       if_.st[i] = init_fpu1[i];
     }
-    /* End of added fpu code */
+    /* End of added FPU code */
 
     void* temp = if_.esp;
 
-    // copy strings onto stack
+    /* Store string arguments onto the stack */
     for (int i = 0; i < argc; i++) {
       if_.esp -= strlen(token_list[i]) + 1;
       memcpy(if_.esp, token_list[i], strlen(token_list[i]) + 1);
     }
 
-    // stack align
+    /* Stack align the ESP */
     uintptr_t align = (uintptr_t) if_.esp - (4 * argc) - 16;
     while (align % 16 != 12) {
       if_.esp--;
@@ -228,11 +211,11 @@ static void start_process(void* file_name_) {
       align--;
     }
 
-    // null pointer sentinel
+    /* Add a null pointer sentinel */
     if_.esp -= 4;
     memset(if_.esp, 0, 4);
 
-    // copy stack addresses strings onto stack
+    /* Store stack addresses of the string arguments onto the stack in reverse order */
     for (int i = 0; i < argc; i++) {
       if_.esp -= sizeof(void*);
       temp -= strlen(token_list[i]) + 1;
@@ -242,20 +225,22 @@ static void start_process(void* file_name_) {
       free(token_list[i]);
     }
 
-    // copy argv onto stack
+    /* Store argv onto the stack */
     void* argv0_addr = if_.esp;
     if_.esp -= sizeof(void*);
     memcpy(if_.esp, &argv0_addr, sizeof(void*));
 
-    // copy argc onto stack
+    /* Store argc onto the stack */
     if_.esp -= sizeof(int);
     memcpy(if_.esp, &argc, sizeof(int));
 
-    // copy fake return address onto stack
+    /* Store a fake return address onto the stack */
     int fake_return = 0;
     if_.esp -= sizeof(void(*)(void));
     memcpy(if_.esp, &fake_return, sizeof(void(*)(void)));
 
+    /* Initialize shared data struct for this process and its parent
+       contingent upon successful load. */
     load_data->loaded = true;
     t->wait_status = malloc(sizeof(struct wait_status));
     load_data->wait_status = t->wait_status;
@@ -268,17 +253,6 @@ static void start_process(void* file_name_) {
     sema_up(&load_data->load_sema);
   }
   
-
-
-  /* Clean up. Exit on failure or jump to userspace */
-  
-  // if (!success) {
-  //   //sema_up(&temporary);
-  //   thread_exit();
-  // }
-
-
-
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -302,6 +276,8 @@ int process_wait(pid_t child_pid) {
   struct thread *curr_thread = thread_current();
   struct list *thread_children = &curr_thread->children;
 
+  /* Search this thread's children for CHILD_PID and set child accordingly
+     if found, or otherwise NULL. */
   struct wait_status *child = NULL;
   struct wait_status *curr_child;
   struct list_elem *e;
@@ -316,15 +292,19 @@ int process_wait(pid_t child_pid) {
     return -1;
   }
   
+  /* Prevent waiting on a process multiple times. */
   child->already_waited = true;
+
+  /* Down the child thread's semaphore to wait for it to finish. */
   sema_down(&child->sema);
+
+  /* Destroy the shared data (no need to decrement/check ref count because
+     the child process is guarunteed to have finished at this point). */
   int exit_code = child->exit_code;
   list_remove(&child->elem);
   free(child);
 
   return exit_code;
-  // sema_down(&temporary);
-  // return 0;
 }
 
 /* Free the current process's resources. */
@@ -374,9 +354,11 @@ void process_exit(void) {
   cur->pcb = NULL;
   free(pcb_to_free);
 
+  /* Up the wait_status's semaphore before exiting this process. */
   sema_up(&cur->wait_status->sema);
 
-
+  /* Decrement the ref_count of this process's wait_struct, freeing/removing
+     it from its children list if its ref count hits 0. */
   lock_acquire(&cur->wait_status->refs_lock);
   cur->wait_status->refs_count--;
   lock_release(&cur->wait_status->refs_lock);
@@ -385,26 +367,20 @@ void process_exit(void) {
     free(cur->wait_status);
   }
 
-  // struct wait_status *child = NULL;
-  // struct list_elem *e;
-  // for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
-  //   child = list_entry(e, struct wait_status, elem);
-  //   lock_acquire(&child->refs_lock);
-  //   child->refs_count--;
-  //   lock_release(&child->refs_lock);
-  //   if (child->refs_count == 0) {
-  //    list_remove(&child->elem);
-  //    free(child);
-  //   }
-  // }
+  /* Decrement ref_counts of all children processes, freeing/removing
+     them from the children list if their ref count hits 0. */
   struct wait_status *child = NULL;
   struct list_elem *e;
   for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
     child = list_entry(e, struct wait_status, elem);
-    list_remove(&child->elem);
-    free(child);
+    lock_acquire(&child->refs_lock);
+    child->refs_count--;
+    lock_release(&child->refs_lock);
+    if (child->refs_count == 0) {
+      list_remove(&child->elem);
+      free(child);
+    }
   }
-
 
   thread_exit();
 }
@@ -522,7 +498,6 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   /* Prevent running file from being written to */
   file_deny_write(file);
 
-
   /* Read and verify executable header. */
   if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
       memcmp(ehdr.e_ident, "\177ELF\1\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 3 ||
@@ -591,7 +566,6 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 
 done:
   /* We arrive here whether the load is successful or not. */
-  /* Prevent write operations to current executable */ 
   return success;
 }
 

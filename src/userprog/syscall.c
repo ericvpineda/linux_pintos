@@ -25,7 +25,7 @@ void syscall_init(void) {
   lock_init(&syscall_lock);
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall"); 
 }
-//int check_file_exists(char *file_name, struct process *pcb, int fd_index);
+
 struct file* get_file(uint32_t* fd);
 bool check_valid_location (void *file_name);
 void validate_buffer(void *ptr, size_t size);
@@ -37,7 +37,6 @@ int find_next_unused_fd(struct process *pcb);
 static void syscall_handler(struct intr_frame* f UNUSED) {
   uint32_t* args = ((uint32_t*)f->esp);
 
-  //validate_buffer(args, sizeof(args) * sizeof(uint32_t));
   validate_pointer(args, sizeof(uint32_t));
   validate_pointer(&args[1], sizeof(args[1]));
   /*
@@ -48,7 +47,6 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
    */
 
   /* printf("System call number: %d\n", args[0]); */
-  // if (args[0] == )
 
   /* Create -- syscall */
   if (args[0] == SYS_CREATE) {
@@ -358,34 +356,3 @@ void validate_string(char *string) {
     }
   }
 }
-
-// /* Check file exists in process fdt */
-// int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
-//   for (int i=3; i < fd_index; i++) {
-//     char *pcb_file = pcb->fdt[i]->name;
-//     if (!strcmp(file_name, pcb_file)) {
-//       return 1; 
-//     }
-//   }
-//   return 0;
-// }
-
-/* Validates buffer by exiting with code -1 if buffer maps to invalid pg or its contents are not in user space */
-// void validate_buffer(void *ptr, size_t size) {
-//   while (size > 0) {
-//     if (!check_valid_location(ptr)) {
-//       thread_current()->wait_status->exit_code = -1;
-//       return process_exit();
-//     }
-//     size_t bytes_validated;
-//     size_t page_remaining = PGSIZE - pg_ofs(ptr);
-
-//     if (page_remaining > size) {
-//       bytes_validated = size;
-//     } else {
-//       bytes_validated = page_remaining;
-//     }
-//     ptr += bytes_validated;
-//     size -= bytes_validated; 
-//   }
-// }
