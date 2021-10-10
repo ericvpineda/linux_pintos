@@ -85,16 +85,10 @@ typedef struct thread* scheduler_func(void);
 
 /* Jump table for dynamically dispatching the current scheduling
    policy in use by the kernel. */
-scheduler_func* scheduler_jump_table[8] = {
-  thread_schedule_fifo,
-  thread_schedule_prio,
-  thread_schedule_fair,
-  thread_schedule_mlfqs,
-  thread_schedule_reserved,
-  thread_schedule_reserved,
-  thread_schedule_reserved,
-  thread_schedule_reserved
-};
+scheduler_func* scheduler_jump_table[8] = {thread_schedule_fifo,     thread_schedule_prio,
+                                           thread_schedule_fair,     thread_schedule_mlfqs,
+                                           thread_schedule_reserved, thread_schedule_reserved,
+                                           thread_schedule_reserved, thread_schedule_reserved};
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in

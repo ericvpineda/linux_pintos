@@ -12,7 +12,8 @@ static thread_func counter_thread_func;
 
 static void test_smfs_hierarchy(size_t num_threads);
 
-#define TEST(n) void test_smfs_hierarchy_ ## n (void) { test_smfs_hierarchy( n ); }
+#define TEST(n)                                                                                    \
+  void test_smfs_hierarchy_##n(void) { test_smfs_hierarchy(n); }
 
 TEST(8);
 TEST(16);
@@ -22,16 +23,8 @@ TEST(256);
 
 struct lock locks[8];
 int counters[8];
-char* thread_names[8] = {
-  "t-min+00",
-  "t-min+08",
-  "t-min+16",
-  "t-min+24",
-  "t-min+32",
-  "t-min+40",
-  "t-min+48",
-  "t-min+56"
-};
+char* thread_names[8] = {"t-min+00", "t-min+08", "t-min+16", "t-min+24",
+                         "t-min+32", "t-min+40", "t-min+48", "t-min+56"};
 
 struct semaphore barrier_sema;
 
@@ -86,8 +79,8 @@ void test_smfs_hierarchy(size_t num_threads) {
     } else {
       msg("counters[%d] >= counters[%d]!!", i, j);
       msg("  Threads with priority...");
-      msg("    ... %d ran %d times,", PRI_MIN + i*8, counters[i]);
-      msg("    ... %d ran %d times,", PRI_MIN + j*8, counters[j]);
+      msg("    ... %d ran %d times,", PRI_MIN + i * 8, counters[i]);
+      msg("    ... %d ran %d times,", PRI_MIN + j * 8, counters[j]);
     }
   }
 }

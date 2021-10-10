@@ -50,8 +50,7 @@ static const struct test threads_tests[] = {
     {"smfs-hierarchy-16", test_smfs_hierarchy_16},
     {"smfs-hierarchy-32", test_smfs_hierarchy_32},
     {"smfs-hierarchy-64", test_smfs_hierarchy_64},
-    {"smfs-hierarchy-256", test_smfs_hierarchy_256}
-};
+    {"smfs-hierarchy-256", test_smfs_hierarchy_256}};
 
 /* Runs the threads test named NAME. */
 void run_threads_test(const char* name) {

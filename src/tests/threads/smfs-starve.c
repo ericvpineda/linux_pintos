@@ -14,7 +14,8 @@ static thread_func greedy_thread_func;
 
 static void test_smfs_starve(size_t competing_threads);
 
-#define TEST(n) void test_smfs_starve_ ## n (void) { test_smfs_starve( n ); }
+#define TEST(n)                                                                                    \
+  void test_smfs_starve_##n(void) { test_smfs_starve(n); }
 
 TEST(0);
 TEST(1);
@@ -49,7 +50,6 @@ void test_smfs_starve(size_t competing_threads) {
   }
   msg("Done spawning competitor threads.");
 
-
   /* Release barrier */
   barrier();
   for (size_t i = 0; i < competing_threads; i++)
@@ -81,7 +81,7 @@ static void greedy_thread_func(void* aux UNUSED) {
   sema_down(&barrier_sema);
 
   /* computes a 32-bit xorshift in a loop */
-  while(true) {
+  while (true) {
     uint32_t x = state;
     x ^= x << 13;
     x ^= x >> 17;

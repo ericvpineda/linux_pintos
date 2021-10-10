@@ -282,7 +282,8 @@ static char** parse_options(char** argv) {
   if (sched_flags_set == 0)
     active_sched_policy = SCHED_DEFAULT;
   else if (sched_flags_set > 1)
-    PANIC("too many scheduler flags set: set at most one of \"-sched-fifo\", \"-sched-prio\", \"-sched-fair\", \"-sched-mlfqs\"");
+    PANIC("too many scheduler flags set: set at most one of \"-sched-fifo\", \"-sched-prio\", "
+          "\"-sched-fair\", \"-sched-mlfqs\"");
   else if (scheduler_flags[SCHED_FIFO])
     active_sched_policy = SCHED_FIFO;
   else if (scheduler_flags[SCHED_PRIO])
@@ -426,9 +427,12 @@ static void usage(void) {
 #endif // VM
 #endif // FILESYS
          "  -rs=SEED           Set random number seed to SEED.\n"
-         "  -sched-fair        Use alternate non-strict priority scheduler. Mutually exclusive with \"-sched-mlfqs\", \"-sched-prio\".\n"
-         "  -sched-mlfqs       Use multi-level feedback queue scheduler. Mutually exclusive with \"-sched-fair\", \"-sched-prio\".\n"
-         "  -sched-prio        Use strict-priority round-robin scheduler. Mutually exclusive with \"-sched-fair\", \"-sched-mlfqs\".\n"
+         "  -sched-fair        Use alternate non-strict priority scheduler. Mutually exclusive "
+         "with \"-sched-mlfqs\", \"-sched-prio\".\n"
+         "  -sched-mlfqs       Use multi-level feedback queue scheduler. Mutually exclusive with "
+         "\"-sched-fair\", \"-sched-prio\".\n"
+         "  -sched-prio        Use strict-priority round-robin scheduler. Mutually exclusive with "
+         "\"-sched-fair\", \"-sched-mlfqs\".\n"
 #ifdef USERPROG
          "  -ul=COUNT          Limit user memory to COUNT pages.\n"
 #endif // USERPROG

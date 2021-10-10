@@ -2,7 +2,6 @@
    thread induces total starvation in a lower-priority thread. */
 /* But with semaphores! */
 
-
 #include <stdio.h>
 #include "tests/threads/tests.h"
 #include "threads/init.h"
@@ -56,7 +55,7 @@ static void medium_prio_thread_func(void* aux UNUSED) {
   sema_up(&sema_last);
 
   /* computes a 32-bit xorshift in a loop */
-  while(true) {
+  while (true) {
     uint32_t x = state;
     x ^= x << 13;
     x ^= x >> 17;
