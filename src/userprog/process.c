@@ -131,11 +131,14 @@ static void start_process(void* file_name_) {
 
   success = pcb_success = new_pcb != NULL;
 
-  /* Initialize next untaken fd index */
+  /* Initialize first untaken fd index 
+   - fd_index 0, 1, 2 = stdin, stdout, stderr (if applicable) */
   new_pcb->fd_index = 3;
-  
-  /* Store running executable at ftd index 0 */
-  // new_pcb->fdt[0] = NULL;
+
+  /* Set all pointers to fdt to NULL */
+  for (int i=0; i < 128; i++) {
+    new_pcb->fdt[i] = NULL;
+  }
 
   char *token_copy, *save_ptr_copy;
   char file_copy[strlen(file_name) + 1];
@@ -327,29 +330,23 @@ int process_wait(pid_t child_pid) {
 /* Free the current process's resources. */
 void process_exit(void) {
   struct thread* cur = thread_current();
+  struct process *pcb = cur->pcb;
   uint32_t* pd;
 
-
-
   /* If this thread does not have a PCB, don't worry */
-  if (cur->pcb == NULL) {
+  if (pcb == NULL) {
     thread_exit();
     NOT_REACHED();
   }
   
+  /* Close all files in the file descriptor table */
+  for (int i = 3; i < pcb->fd_index; i++) {
+    file_close(pcb->fdt[i]);
+  }
+
   /* Close current running executable */
-  file_close(cur->pcb->fdt[0]);
-  
-  // close all files in the file descriptor table
-  // for (int i = 0; i < cur->pcb->fd_index; i++) {
-  //   file_close(cur->pcb->fdt[i]);
-  // }
-  // for (unsigned int i = 0; i < sizeof(cur->pcb->fdt) / sizeof(cur->pcb->fdt[0]); i++) {
-  //   file_close(cur->pcb->fdt[i]);
-  // }
-  //free(cur->pcb->fdt);
-
-
+  file_close(pcb->running_file);
+  pcb->running_file = NULL;
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -519,10 +516,11 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
     goto done;
   }
 
-  // list_push_back(t->pcb->fdt, file);
-  t->pcb->fdt[0] = file;
-  file_deny_write(file);
+  /* Assign process running file */
+  t->pcb->running_file = file;
   
+  /* Prevent running file from being written to */
+  file_deny_write(file);
 
 
   /* Read and verify executable header. */

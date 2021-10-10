@@ -31,6 +31,7 @@ bool check_valid_location (void *file_name);
 void validate_buffer(void *ptr, size_t size);
 void validate_pointer(void *ptr, size_t size);
 void validate_string(char *string);
+int find_next_unused_fd(struct process *pcb);
 
 /* Main syscall handler */
 static void syscall_handler(struct intr_frame* f UNUSED) {
@@ -91,7 +92,8 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     
     if (fd >= 3 && fd < fd_index && check_valid_location((void *) &fd)) {
       struct file *open_file_table = get_file(args);
-      file_allow_write(open_file_table);
+      file_close(open_file_table);
+      pcb->fdt[fd] = NULL;
     }
     lock_release(&syscall_lock);
   }
@@ -144,13 +146,26 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       return;
     } 
 
-      /* Create new open_file_table in process fdt */
-    struct file* open_file_table = filesys_open(file_name);
+    struct file* open_file_table = NULL; 
+
+    /* Check if open file table for file_name exists already */
+    for (int i=3; i < fd_index; i++) {
+      struct file *tmp = pcb->fdt[i];
+      if (tmp && !strcmp(file_name, tmp->name)) {
+        open_file_table = file_reopen(tmp);
+        break;
+      }
+    }
+
+    /* Else create new file table */
     if (!open_file_table) {
-      f->eax = -1;
-      thread_current()->pcb->exit_code = 0;
-      lock_release(&syscall_lock);
-      return;
+      open_file_table = filesys_open(file_name);
+      if (!open_file_table) {
+        f->eax = -1;
+        thread_current()->pcb->exit_code = 0;
+        lock_release(&syscall_lock);
+        return;
+      }
     }
     
     /* Else create file */
@@ -159,7 +174,10 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     
     /* Return fd to user process */
     f->eax = fd_index;
-    pcb->fd_index++;
+    int next_fd = find_next_unused_fd(pcb);
+    if (next_fd > -1) {
+      pcb->fd_index = next_fd;
+    }
     lock_release(&syscall_lock);
   }
 
@@ -291,16 +309,15 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
 // HELPER METHODS
 
-// /* Check file exists in process fdt */
-// int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
-//   for (int i=3; i < fd_index; i++) {
-//     char *pcb_file = pcb->fdt[i]->name;
-//     if (!strcmp(file_name, pcb_file)) {
-//       return 1; 
-//     }
-//   }
-//   return 0;
-// }
+/* Find next unused file descriptor index */
+int find_next_unused_fd(struct process *pcb) {
+  for (int i=3; i < 128; i++) {
+    if (!pcb->fdt[i]) {
+      return i;
+    }
+  }
+  return -1; 
+}
 
 /* Get file associated with fd */
 struct file* get_file(uint32_t* args) {
@@ -319,9 +336,39 @@ bool check_valid_location (void *file_name) {
   if (!is_user_vaddr(file_name) || !pagedir_get_page(pcb->pagedir, file_name)) {
     return 0; 
   }
-
   return 1;
 }
+
+
+/* Validates ptr by exiting with code -1 if ptr is an invalid memory addr or invalid pointer */
+void validate_pointer(void *ptr, size_t size) {
+  if (!check_valid_location(ptr) || !check_valid_location(ptr + size)) {
+    thread_current()->wait_status->exit_code = -1;
+    return process_exit();
+  }
+}
+
+/* Validates string by exiting with code -1 if string maps to invalid pg or its contents are not in user space */
+void validate_string(char *string) {
+  if (is_user_vaddr(string)) {
+    char *pg = pagedir_get_page(thread_current()->pcb->pagedir, string);
+    if (pg == NULL || !check_valid_location(string + strlen(pg) + 1)) {
+      thread_current()->wait_status->exit_code = -1;
+      return process_exit();
+    }
+  }
+}
+
+// /* Check file exists in process fdt */
+// int check_file_exists(char *file_name, struct process *pcb, int fd_index) {
+//   for (int i=3; i < fd_index; i++) {
+//     char *pcb_file = pcb->fdt[i]->name;
+//     if (!strcmp(file_name, pcb_file)) {
+//       return 1; 
+//     }
+//   }
+//   return 0;
+// }
 
 /* Validates buffer by exiting with code -1 if buffer maps to invalid pg or its contents are not in user space */
 // void validate_buffer(void *ptr, size_t size) {
@@ -342,22 +389,3 @@ bool check_valid_location (void *file_name) {
 //     size -= bytes_validated; 
 //   }
 // }
-
-/* Validates ptr by exiting with code -1 if ptr is an invalid memory addr or invalid pointer */
-void validate_pointer(void *ptr, size_t size) {
-  if (!check_valid_location(ptr) || !check_valid_location(ptr + size)) {
-    thread_current()->wait_status->exit_code = -1;
-    return process_exit();
-  }
-}
-
-/* Validates string by exiting with code -1 if string maps to invalid pg or its contents are not in user space */
-void validate_string(char *string) {
-  if (is_user_vaddr(string)) {
-    char *pg = pagedir_get_page(thread_current()->pcb->pagedir, string);
-    if (pg == NULL || !check_valid_location(string + strlen(pg) + 1)) {
-      thread_current()->wait_status->exit_code = -1;
-      return process_exit();
-    }
-  }
-}
