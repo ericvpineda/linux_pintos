@@ -24,7 +24,7 @@
 static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
 
-/* load_data struct is used to track successful loads in child threads */
+/* The load_data struct is used to track the load success state of child threads */
 struct load_data {
   char* file_name;
   struct wait_status *wait_status;
@@ -93,7 +93,6 @@ pid_t process_execute(const char* file_name) {
       tid = TID_ERROR;
     }
   }
-
   return tid;
 }
 
@@ -126,6 +125,7 @@ static void start_process(void* file_name_) {
   char file_copy[strlen(file_name) + 1];
   strlcpy(file_copy, file_name, strlen(file_name) + 1);
 
+  /* Iterate through filename copy to get argc */
   char *token_copy, *save_ptr_copy;
   int argc = 0;
   for (token_copy = strtok_r(file_copy, " ", &save_ptr_copy); token_copy != NULL; token_copy = strtok_r (NULL, " ", &save_ptr_copy)) {
@@ -136,6 +136,8 @@ static void start_process(void* file_name_) {
   char *token_list[argc];
   int i = argc - 1;
   int tokens_start;
+  
+  /* Iterate through filename to extract tokens into token_list */
   for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
     token_list[i] = (char*) malloc(strlen(token) + 1);
     strlcpy(token_list[i], token, strlen(token) + 1);
@@ -177,6 +179,7 @@ static void start_process(void* file_name_) {
     }
 
     if (!success) {
+      // free token_list args before exiting thread
       for (int i = argc - 1; i >= tokens_start; i--) {
         free(token_list[i]);
       }
@@ -221,6 +224,7 @@ static void start_process(void* file_name_) {
       temp -= strlen(token_list[i]) + 1;
       memcpy(if_.esp, &temp, sizeof(void*));
     }
+    // free token_list args now that we are done using it
     for (int i = argc - 1; i >= tokens_start; i--) {
       free(token_list[i]);
     }
@@ -243,7 +247,10 @@ static void start_process(void* file_name_) {
        contingent upon successful load. */
     load_data->loaded = true;
     t->wait_status = malloc(sizeof(struct wait_status));
+
+    // put wait_status struct into load_data so parent has access to it
     load_data->wait_status = t->wait_status;
+
     t->wait_status->refs_count = 2;
     t->wait_status->exit_code = -1;
     t->wait_status->tid = t->tid;
@@ -288,6 +295,8 @@ int process_wait(pid_t child_pid) {
       break;
     }
   }
+
+  /* Return -1 if child does not exist or process_wait() has already been called on it */
   if (child == NULL || child->already_waited) {
     return -1;
   }
@@ -299,7 +308,7 @@ int process_wait(pid_t child_pid) {
   sema_down(&child->sema);
 
   /* Destroy the shared data (no need to decrement/check ref count because
-     the child process is guarunteed to have finished at this point). */
+     the child process is guaranteed to have finished at this point). */
   int exit_code = child->exit_code;
   list_remove(&child->elem);
   free(child);
@@ -381,7 +390,6 @@ void process_exit(void) {
       free(child);
     }
   }
-
   thread_exit();
 }
 

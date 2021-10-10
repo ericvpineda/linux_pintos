@@ -292,14 +292,18 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     lock_release(&syscall_lock);
   }
 
+  /* Halt -- syscall */
   else if (args[0] == SYS_HALT) {
     shutdown_power_off();
   }
 
+  /* Exec -- syscall */
   else if (args[0] == SYS_EXEC) {
     validate_string((char*) args[1]);
     f->eax = process_execute((char*) args[1]);
   }
+  
+  /* Wait -- syscall */
   else if (args[0] == SYS_WAIT) {
     f->eax = process_wait(args[1]);
   }
