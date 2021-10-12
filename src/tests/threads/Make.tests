@@ -49,7 +49,7 @@ tests/threads_SRC += tests/threads/mlfqs-fair.c
 tests/threads_SRC += tests/threads/mlfqs-block.c
 tests/threads_SRC += tests/threads/smfs-starve.c
 tests/threads_SRC += tests/threads/smfs-prio-change.c
-tests/threads_SRC += tests/threads/smfs-priority.c
+tests/threads_SRC += tests/threads/smfs-hierarchy.c
 
 MLFQS_OUTPUTS = 				\
 tests/threads/mlfqs-load-1.output		\
@@ -63,15 +63,18 @@ tests/threads/mlfqs-nice-10.output		\
 tests/threads/mlfqs-block.output
 
 ALARM_TESTS       = $(filter tests/threads/alarm-%,$(tests/threads_TESTS))
+                    # tests/threads/alarm-priority is included but overriden by SCHED_PRIO_TESTS
 SCHED_PRIO_TESTS  = $(filter tests/threads/priority-%,$(tests/threads_TESTS)) \
                     $(filter tests/threads/mt-matmul%,$(tests/threads_TESTS)) \
-                    tests/threads/st-matmul
+                    tests/threads/st-matmul \
+                    tests/threads/alarm-priority
 SCHED_FAIR_TESTS  = $(filter tests/threads/smfs-%,$(tests/threads_TESTS))
 SCHED_MLFQS_TESTS = $(filter tests/threads/mlfqs-%,$(tests/threads_TESTS))
 
 # This is where we set the scheduler used for each test
+# ALARM_TESTS must be first
 $(foreach TEST,$(ALARM_TESTS), \
-          $(eval $(TEST)_KERNELARGS = -sched=prio))
+          $(eval $(TEST)_KERNELARGS = -sched=fifo))
 $(foreach TEST,$(SCHED_PRIO_TESTS), \
           $(eval $(TEST)_KERNELARGS = -sched=prio))
 $(foreach TEST,$(SCHED_FAIR_TESTS), \

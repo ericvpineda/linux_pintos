@@ -7,6 +7,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "devices/timer.h"
+#include "threads/interrupt.h"
 
 static thread_func counter_thread_func;
 
@@ -21,12 +22,12 @@ TEST(32);
 TEST(64);
 TEST(256);
 
-struct lock locks[8];
 int counters[8];
 char* thread_names[8] = {"t-min+00", "t-min+08", "t-min+16", "t-min+24",
                          "t-min+32", "t-min+40", "t-min+48", "t-min+56"};
 
 struct semaphore barrier_sema;
+static bool keep_looping = true;
 
 void test_smfs_hierarchy(size_t num_threads) {
   ASSERT(active_sched_policy == SCHED_FAIR);
@@ -38,11 +39,9 @@ void test_smfs_hierarchy(size_t num_threads) {
   sema_init(&barrier_sema, 0);
   barrier();
 
-  /* Initialize counter semaphores. */
-  for (size_t i = 0; i < 8; i++) {
+  /* Initialize counters. */
+  for (size_t i = 0; i < 8; i++)
     counters[i] = 0;
-    lock_init(&locks[i]);
-  }
 
   msg("Spawning counter threads...");
 
@@ -50,7 +49,7 @@ void test_smfs_hierarchy(size_t num_threads) {
   for (size_t i = 0; i < num_threads; i++) {
     /* Create competitor threads, each with a priority equal to
        PRI_MIN + c, where c ∈ {0, 8, 16, ..., 56} */
-    void* argument = (void*)(next_pri_offset >> 3);
+    void* argument = (void*)&counters[next_pri_offset >> 3];
     char* name = thread_names[next_pri_offset >> 3];
     thread_create(name, PRI_MIN + next_pri_offset, counter_thread_func, argument);
     next_pri_offset = (next_pri_offset + 8) % 64;
@@ -70,7 +69,9 @@ void test_smfs_hierarchy(size_t num_threads) {
      Note that the order of acquisition gives higher-priority threads a
      slight advantage; this is nice for students, so I left it as-is. */
   for (size_t i = 0; i < 8; i++) {
-    lock_acquire(&locks[i]);
+    intr_disable();
+    keep_looping = false;
+    intr_enable();
   }
 
   for (size_t i = 0, j = 1; j < 8; i++, j++) {
@@ -86,20 +87,19 @@ void test_smfs_hierarchy(size_t num_threads) {
 }
 
 static void counter_thread_func(void* argument) {
-  int* counter = &counters[(int)argument];
-  struct lock* lock = &locks[(int)argument];
+  int* counter = (int*)argument;
 
   sema_down(&barrier_sema);
+
+  bool loop = true;
 
   /* A very inefficient way of counting at each priority without
      atomics or having to write different code for each number
      of counter threads. */
-  while (true) {
-    lock_acquire(lock);
+  while (loop) {
+    intr_disable();
     *counter += 1;
-    lock_release(lock);
-    timer_sleep(32);
+    loop = keep_looping;
+    intr_enable();
   }
-
-  __builtin_unreachable();
 }
