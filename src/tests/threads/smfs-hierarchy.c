@@ -63,7 +63,7 @@ void test_smfs_hierarchy(size_t num_threads) {
     sema_up(&barrier_sema);
 
   /* Sleep for a bit to allow the counter threads time to run amok. */
-  timer_sleep(400000);
+  timer_sleep(200000);
 
   /* Rein in the counters...
      Note that the order of acquisition gives higher-priority threads a
