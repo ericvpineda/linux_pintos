@@ -25,17 +25,6 @@ typedef int tid_t;
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63     /* Highest priority. */
 
-/* Shared data struct between parent and child so that parent can wait on child thread. */
-struct wait_status {
-   tid_t tid;
-   struct semaphore sema;
-   int exit_code;
-   int refs_count;
-   struct lock refs_lock;
-   bool already_waited;
-   struct list_elem elem;
-};
-
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -107,8 +96,6 @@ struct thread {
 #ifdef USERPROG
   /* Owned by process.c. */
   struct process* pcb; /* Process control block if this thread is a userprog */
-  struct list children; /* ADDED: List of all children for this thread (elems will be a wait_status struct). */
-  struct wait_status *wait_status; /* ADDED: This thread's wait status. */
 #endif
 
   /* Owned by thread.c. */

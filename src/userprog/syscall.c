@@ -183,7 +183,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   if (args[0] == SYS_EXIT) {
     lock_acquire(&syscall_lock);
     f->eax = args[1];
-    thread_current()->wait_status->exit_code = args[1];
+    thread_current()->pcb->wait_status->exit_code = args[1];
     lock_release(&syscall_lock);
     process_exit();
   }
@@ -345,7 +345,7 @@ bool check_valid_location (void *file_name) {
 /* Validates ptr by exiting with code -1 if ptr is an invalid memory addr or invalid pointer */
 void validate_pointer(void *ptr, size_t size) {
   if (!check_valid_location(ptr) || !check_valid_location(ptr + size)) {
-    thread_current()->wait_status->exit_code = -1;
+    thread_current()->pcb->wait_status->exit_code = -1;
     return process_exit();
   }
 }
@@ -355,7 +355,7 @@ void validate_string(char *string) {
   if (is_user_vaddr(string)) {
     char *pg = pagedir_get_page(thread_current()->pcb->pagedir, string);
     if (pg == NULL || !check_valid_location(string + strlen(pg) + 1)) {
-      thread_current()->wait_status->exit_code = -1;
+      thread_current()->pcb->wait_status->exit_code = -1;
       return process_exit();
     }
   }

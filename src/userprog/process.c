@@ -49,7 +49,7 @@ void userprog_init(void) {
   success = t->pcb != NULL;
 
   /* Initialize list of children */
-  list_init(&t->children);
+  list_init(&t->pcb->children);
 
   /* Kill the kernel if we did not succeed */
   ASSERT(success);
@@ -87,7 +87,7 @@ pid_t process_execute(const char* file_name) {
     sema_down(&load_data.load_sema);
     if (load_data.loaded) {
       // if load was successful, add wait status to the parent's children
-      list_push_back(&t->children, &load_data.wait_status->elem);
+      list_push_back(&t->pcb->children, &load_data.wait_status->elem);
     } else {
       palloc_free_page(fn_copy);
       tid = TID_ERROR;
@@ -108,7 +108,7 @@ static void start_process(void* file_name_) {
   struct process* new_pcb = malloc(sizeof(struct process));
 
   /* Initialize children list for current thread */
-  list_init(&t->children);
+  list_init(&new_pcb->children);
 
   success = pcb_success = new_pcb != NULL;
 
@@ -246,17 +246,17 @@ static void start_process(void* file_name_) {
     /* Initialize shared data struct for this process and its parent
        contingent upon successful load. */
     load_data->loaded = true;
-    t->wait_status = malloc(sizeof(struct wait_status));
+    t->pcb->wait_status = malloc(sizeof(struct wait_status));
 
     // put wait_status struct into load_data so parent has access to it
-    load_data->wait_status = t->wait_status;
+    load_data->wait_status = t->pcb->wait_status;
 
-    t->wait_status->refs_count = 2;
-    t->wait_status->exit_code = -1;
-    t->wait_status->tid = t->tid;
-    t->wait_status->already_waited = false;
-    sema_init(&t->wait_status->sema, 0);
-    lock_init(&t->wait_status->refs_lock);   
+    t->pcb->wait_status->refs_count = 2;
+    t->pcb->wait_status->exit_code = -1;
+    t->pcb->wait_status->tid = t->tid;
+    t->pcb->wait_status->already_waited = false;
+    sema_init(&t->pcb->wait_status->sema, 0);
+    lock_init(&t->pcb->wait_status->refs_lock);   
     sema_up(&load_data->load_sema);
   }
   
@@ -280,8 +280,8 @@ static void start_process(void* file_name_) {
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int process_wait(pid_t child_pid) {
-  struct thread *curr_thread = thread_current();
-  struct list *thread_children = &curr_thread->children;
+  struct thread *t = thread_current();
+  struct list *thread_children = &t->pcb->children;
 
   /* Search this thread's children for CHILD_PID and set child accordingly
      if found, or otherwise NULL. */
@@ -353,34 +353,26 @@ void process_exit(void) {
     pagedir_destroy(pd);
   }
 
-  printf("%s: exit(%d)\n", thread_current()->pcb->process_name, thread_current()->wait_status->exit_code);
-
-  /* Free the PCB of this process and kill this thread
-     Avoid race where PCB is freed before t->pcb is set to NULL
-     If this happens, then an unfortuantely timed timer interrupt
-     can try to activate the pagedir, but it is now freed memory */
-  struct process* pcb_to_free = cur->pcb;
-  cur->pcb = NULL;
-  free(pcb_to_free);
+  printf("%s: exit(%d)\n", pcb->process_name, pcb->wait_status->exit_code);
 
   /* Up the wait_status's semaphore before exiting this process. */
-  sema_up(&cur->wait_status->sema);
+  sema_up(&pcb->wait_status->sema);
 
   /* Decrement the ref_count of this process's wait_struct, freeing/removing
      it from its children list if its ref count hits 0. */
-  lock_acquire(&cur->wait_status->refs_lock);
-  cur->wait_status->refs_count--;
-  lock_release(&cur->wait_status->refs_lock);
-  if (cur->wait_status->refs_count == 0) {
-    list_remove(&cur->wait_status->elem);
-    free(cur->wait_status);
+  lock_acquire(&pcb->wait_status->refs_lock);
+  pcb->wait_status->refs_count--;
+  lock_release(&pcb->wait_status->refs_lock);
+  if (pcb->wait_status->refs_count == 0) {
+    list_remove(&pcb->wait_status->elem);
+    free(pcb->wait_status);
   }
 
   /* Decrement ref_counts of all children processes, freeing/removing
      them from the children list if their ref count hits 0. */
   struct wait_status *child = NULL;
   struct list_elem *e;
-  for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
+  for (e = list_begin(&pcb->children); e != list_end(&pcb->children); e = list_next(e)) {
     child = list_entry(e, struct wait_status, elem);
     lock_acquire(&child->refs_lock);
     child->refs_count--;
@@ -390,6 +382,16 @@ void process_exit(void) {
       free(child);
     }
   }
+
+
+  /* Free the PCB of this process and kill this thread
+    Avoid race where PCB is freed before t->pcb is set to NULL
+    If this happens, then an unfortuantely timed timer interrupt
+    can try to activate the pagedir, but it is now freed memory */
+  struct process* pcb_to_free = cur->pcb;
+  cur->pcb = NULL;
+  free(pcb_to_free);
+
   thread_exit();
 }
 
