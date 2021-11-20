@@ -28,7 +28,6 @@ struct process {
   uint32_t* pagedir;          /* Page directory. */
   char process_name[16];      /* Name of the main thread */
   struct thread* main_thread; /* Pointer to main thread */
-  int exit_code;              /* ADDED: Exit code */
   struct file *fdt[128];      /* ADDED: File descriptor table */
   int fd_index;               /* ADDED: Next unused fd index */
   struct file *running_file;  /* ADDED: File process currently running */
@@ -45,6 +44,14 @@ struct wait_status {
    struct lock refs_lock;
    bool already_waited;
    struct list_elem elem;
+};
+
+/* The load_data struct is used to track the load success state of child threads */
+struct load_data {
+  char* file_name;
+  struct wait_status *wait_status;
+  struct semaphore load_sema;
+  bool loaded;
 };
 
 void userprog_init(void);
