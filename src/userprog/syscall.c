@@ -57,7 +57,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     /* Check each byte located in valid vaddr and pagedir */
     if (!check_valid_location((void *)file_name)) {
       f->eax = 0;
-      thread_current()->pcb->exit_code = -1;
+      thread_current()->pcb->wait_status->exit_code = -1;
       lock_release(&syscall_lock);
       return process_exit();
     }
@@ -135,7 +135,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
     if (!check_valid_location((void *)file_name) || !file_name) {
       f->eax = 0;
-      thread_current()->pcb->exit_code = -1;
+      thread_current()->pcb->wait_status->exit_code = -1;
       lock_release(&syscall_lock);
       return process_exit();
     } else if (*file_name == '\0') {
@@ -160,7 +160,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       open_file_table = filesys_open(file_name);
       if (!open_file_table) {
         f->eax = -1;
-        thread_current()->pcb->exit_code = 0;
+        thread_current()->pcb->wait_status->exit_code = 0;
         lock_release(&syscall_lock);
         return;
       }
@@ -200,7 +200,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     /* Check buffer correct location & buffer valid fd */
     if (fd == 1 || fd < 0 || fd >= fd_index || !check_valid_location((void *)buffer)) {
       f->eax = -1;
-      thread_current()->pcb->exit_code = -1;
+      thread_current()->pcb->wait_status->exit_code = -1;
       lock_release(&syscall_lock);
       return process_exit();
     }
@@ -247,7 +247,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     /* Check invalid fd and vaddr/page locations */
     if (fd <= 0 || fd >= fd_index || !check_valid_location((void *) buffer)) {
       f->eax = -1;
-      thread_current()->pcb->exit_code = -1;
+      thread_current()->pcb->wait_status->exit_code = -1;
       lock_release(&syscall_lock);
       return process_exit();
     }

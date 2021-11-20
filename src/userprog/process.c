@@ -24,14 +24,6 @@
 static thread_func start_process NO_RETURN;
 static bool load(const char* file_name, void (**eip)(void), void** esp);
 
-/* The load_data struct is used to track the load success state of child threads */
-struct load_data {
-  char* file_name;
-  struct wait_status *wait_status;
-  struct semaphore load_sema;
-  bool loaded;
-};
-
 /* Initializes user programs in the system by ensuring the main
    thread has a minimal PCB so that it can execute and wait for
    the first user process. Any additions to the PCB should be also
