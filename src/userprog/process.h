@@ -28,7 +28,7 @@ struct process {
   uint32_t* pagedir;          /* Page directory. */
   char process_name[16];      /* Name of the main thread */
   struct thread* main_thread; /* Pointer to main thread */
-  struct file *fdt[128];      /* ADDED: File descriptor table */
+  struct list fdt;      /* ADDED: File descriptor table */
   int fd_index;               /* ADDED: Next unused fd index */
   struct file *running_file;  /* ADDED: File process currently running */
   struct list children; /* ADDED: List of all children for this thread (elems will be a wait_status struct). */

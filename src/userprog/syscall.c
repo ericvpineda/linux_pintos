@@ -31,7 +31,6 @@ bool check_valid_location (void *file_name);
 void validate_buffer(void *ptr, size_t size);
 void validate_pointer(void *ptr, size_t size);
 void validate_string(char *string);
-int find_next_unused_fd(struct process *pcb);
 
 /* Main syscall handler */
 static void syscall_handler(struct intr_frame* f UNUSED) {
@@ -91,7 +90,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     if (fd >= 3 && fd < fd_index && check_valid_location((void *) &fd)) {
       struct file *open_file_table = get_file(args);
       file_close(open_file_table);
-      pcb->fdt[fd] = NULL;
+      list_remove(&open_file_table->elem);
     }
     lock_release(&syscall_lock);
   }
@@ -142,40 +141,28 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       f->eax = -1;
       lock_release(&syscall_lock);
       return;
-    } 
-
-    struct file* open_file_table = NULL; 
-
-    /* Check if open file table for file_name exists already */
-    for (int i=3; i < fd_index; i++) {
-      struct file *tmp = pcb->fdt[i];
-      if (tmp && !strcmp(file_name, tmp->name)) {
-        open_file_table = file_reopen(tmp);
-        break;
-      }
     }
 
-    /* Else create new file table */
-    if (!open_file_table) {
-      open_file_table = filesys_open(file_name);
-      if (!open_file_table) {
-        f->eax = -1;
-        thread_current()->pcb->wait_status->exit_code = 0;
-        lock_release(&syscall_lock);
-        return;
-      }
+    struct file* open_file = filesys_open(file_name);
+
+    /* If no open file for file_name exists, return error code */
+    if (!open_file) {
+      f->eax = -1;
+      thread_current()->pcb->wait_status->exit_code = 0;
+      lock_release(&syscall_lock);
+      return;
     }
-    
-    /* Else create file */
-    pcb->fdt[fd_index] = open_file_table;
-    pcb->fdt[fd_index]->name = file_name;
+
+
+    /* Else, add open_file to FDT */
+    open_file->name = file_name;
+    open_file->id = fd_index;
+    list_push_front(&pcb->fdt, &open_file->elem);
     
     /* Return fd to user process */
     f->eax = fd_index;
-    int next_fd = find_next_unused_fd(pcb);
-    if (next_fd > -1) {
-      pcb->fd_index = next_fd;
-    }
+    pcb->fd_index++;
+
     lock_release(&syscall_lock);
   }
 
@@ -311,23 +298,19 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
 // HELPER METHODS
 
-/* Find next unused file descriptor index */
-int find_next_unused_fd(struct process *pcb) {
-  for (int i=3; i < 128; i++) {
-    if (!pcb->fdt[i]) {
-      return i;
-    }
-  }
-  return -1; 
-}
-
 /* Get file associated with fd */
 struct file* get_file(uint32_t* args) {
   int fd = (int) args[1];
   struct process* pcb = thread_current()->pcb;
   int unused_fd = (int) pcb->fd_index;
   if (fd < unused_fd || fd >= 0) {
-    return pcb->fdt[fd];
+    struct list_elem* e;
+    for (e = list_begin(&pcb->fdt); e != list_end(&pcb->fdt); e = list_next(e)) {
+      struct file* tmp = list_entry(e, struct file, elem);
+      if (tmp->id == fd) {
+        return tmp;
+      }
+    }
   }
   return NULL;
 }

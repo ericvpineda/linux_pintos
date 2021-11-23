@@ -105,13 +105,11 @@ static void start_process(void* file_name_) {
   success = pcb_success = new_pcb != NULL;
 
   /* Initialize first untaken fd index 
-   - fd_index 0, 1, 2 = stdin, stdout, stderr (if applicable) */
+  fd_index 0, 1, 2 = stdin, stdout, stderr (if applicable) */
   new_pcb->fd_index = 3;
 
-  /* Set all pointers in file descriptor table to NULL */
-  for (int i=0; i < 128; i++) {
-    new_pcb->fdt[i] = NULL;
-  }
+  /* Initialize FDT for this new PCB */
+  list_init(&new_pcb->fdt);
 
   /* Parse string arguments seperated by spaces */
   char file_copy[strlen(file_name) + 1];
@@ -321,8 +319,9 @@ void process_exit(void) {
   }
   
   /* Close all files in the file descriptor table */
-  for (int i = 3; i < pcb->fd_index; i++) {
-    file_close(pcb->fdt[i]);
+  while (!list_empty(&pcb->fdt)) {
+    struct file* tmp = list_entry(list_pop_front(&pcb->fdt), struct file, elem);
+    file_close(tmp);
   }
 
   /* Close current running executable */
