@@ -63,10 +63,10 @@ switch_entry:
 	# Discard switch_threads() arguments.
 	addl $8, %esp
 
-	# Call thread_schedule_tail(prev).
+	# Call thread_switch_tail(prev).
 	pushl %eax
-.globl thread_schedule_tail
-	call thread_schedule_tail
+.globl thread_switch_tail
+	call thread_switch_tail
 	addl $4, %esp
 
 	# Start thread proper.

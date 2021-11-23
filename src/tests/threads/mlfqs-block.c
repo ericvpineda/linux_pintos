@@ -22,7 +22,7 @@ static int64_t start_time;
 static struct lock lock;
 
 void test_mlfqs_block(void) {
-  ASSERT(thread_mlfqs);
+  ASSERT(active_sched_policy == SCHED_MLFQS);
 
   msg("Main thread acquiring lock.");
   lock_init(&lock);

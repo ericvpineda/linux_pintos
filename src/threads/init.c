@@ -222,6 +222,8 @@ static char** read_command_line(void) {
 /* Parses options in ARGV[]
    and returns the first non-option argument. */
 static char** parse_options(char** argv) {
+  bool scheduler_flags[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
   for (; *argv != NULL && **argv == '-'; argv++) {
     char* save_ptr;
     char* name = strtok_r(*argv, "=", &save_ptr);
@@ -247,8 +249,18 @@ static char** parse_options(char** argv) {
 #endif
     else if (!strcmp(name, "-rs"))
       random_init(atoi(value));
-    else if (!strcmp(name, "-mlfqs"))
-      thread_mlfqs = true;
+    else if (!strcmp(name, "-sched")) {
+      if (!strcmp(value, "fifo"))
+        scheduler_flags[SCHED_FIFO] = 1;
+      else if (!strcmp(value, "prio"))
+        scheduler_flags[SCHED_PRIO] = 1;
+      else if (!strcmp(value, "fair"))
+        scheduler_flags[SCHED_FAIR] = 1;
+      else if (!strcmp(value, "mlfqs"))
+        scheduler_flags[SCHED_MLFQS] = 1;
+      else
+        PANIC("unknown scheduler option `%s' (use -h for help)", value);
+    }
 #ifdef USERPROG
     else if (!strcmp(name, "-ul"))
       user_page_limit = atoi(value);
@@ -256,6 +268,32 @@ static char** parse_options(char** argv) {
     else
       PANIC("unknown option `%s' (use -h for help)", name);
   }
+
+  /* Configure the kernel scheduler to use the algorithm
+   * corresponding to the requested command-line options.
+   * All three flags are mutually-exclusive, and as such
+   * setting multiple will panic.
+   * If none are set, the scheduler is set to use the
+   * default value, SCHED_PRIO. */
+  size_t sched_flags_set = 0;
+  for (int i = 0; i < 8; i++) {
+    sched_flags_set += scheduler_flags[i];
+  }
+  if (sched_flags_set == 0)
+    active_sched_policy = SCHED_DEFAULT;
+  else if (sched_flags_set > 1)
+    PANIC("too many scheduler flags set: set at most one of \"-sched-fifo\", \"-sched-prio\", "
+          "\"-sched-fair\", \"-sched-mlfqs\"");
+  else if (scheduler_flags[SCHED_FIFO])
+    active_sched_policy = SCHED_FIFO;
+  else if (scheduler_flags[SCHED_PRIO])
+    active_sched_policy = SCHED_PRIO;
+  else if (scheduler_flags[SCHED_FAIR])
+    active_sched_policy = SCHED_FAIR;
+  else if (scheduler_flags[SCHED_MLFQS])
+    active_sched_policy = SCHED_MLFQS;
+  else
+    PANIC("kernel bug in init.c: unreachable case");
 
   /* Initialize the random number generator based on the system
      time.  This has no effect if an "-rs" option was specified.
@@ -386,13 +424,18 @@ static void usage(void) {
          "  -scratch=BDEV      Use BDEV for scratch instead of default.\n"
 #ifdef VM
          "  -swap=BDEV         Use BDEV for swap instead of default.\n"
-#endif
-#endif
+#endif // VM
+#endif // FILESYS
          "  -rs=SEED           Set random number seed to SEED.\n"
-         "  -mlfqs             Use multi-level feedback queue scheduler.\n"
+         "  -sched-fair        Use alternate non-strict priority scheduler. Mutually exclusive "
+         "with \"-sched-mlfqs\", \"-sched-prio\".\n"
+         "  -sched-mlfqs       Use multi-level feedback queue scheduler. Mutually exclusive with "
+         "\"-sched-fair\", \"-sched-prio\".\n"
+         "  -sched-prio        Use strict-priority round-robin scheduler. Mutually exclusive with "
+         "\"-sched-fair\", \"-sched-mlfqs\".\n"
 #ifdef USERPROG
          "  -ul=COUNT          Limit user memory to COUNT pages.\n"
-#endif
+#endif // USERPROG
   );
   shutdown_power_off();
 }
@@ -429,4 +472,4 @@ static void locate_block_device(enum block_type role, const char* name) {
     block_set_role(role, block);
   }
 }
-#endif
+#endif // FILESYS

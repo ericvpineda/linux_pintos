@@ -6,7 +6,8 @@
 #include <syscall.h>
 #include <pthread.h>
 
-#define NUM_SYNCH 128
+/* These locks plus the console lock add up to 128 in total */
+#define NUM_SYNCH 127
 
 // Global variables
 sema_t thread_wait;
