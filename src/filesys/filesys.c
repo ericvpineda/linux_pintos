@@ -202,7 +202,7 @@ bool filesys_remove(const char* name) {
     }
   }
 
-  // free(parent_id); // i think we need this?
+  free(parent_id);
   dir_close(parent_dir);
   return false;
 }

@@ -95,6 +95,10 @@ bool inode_resize(struct inode_disk* id, block_sector_t id_sector, off_t size) {
     goto complete;
   }
 
+  //for doubly indirect
+  // buffer: stores array of indirect ptrs
+  // buffer2: stores array of direct ptrs for each indirect ptr
+
   /* Doubly indirect pointer */
   if (id->doubly_indirect == 0) {
     // Allocate block for doubly indirect pointer if it doesn't exist and zero out the buffer
@@ -124,9 +128,12 @@ bool inode_resize(struct inode_disk* id, block_sector_t id_sector, off_t size) {
         buffer2[j] = 0;
       } else if (size > (TOTAL_DIRECT + NUM_INDIRECT + i * NUM_INDIRECT + j) * BLOCK_SECTOR_SIZE &&
                  buffer2[j] == 0) {
-        if (!free_map_allocate(1, &buffer2[j]))
+        if (!free_map_allocate(1, &buffer2[j])) {
+          int b = 2;
           goto rollback;
+        }
         cache_write(fs_device, buffer2[j], zero_block);
+        int a = 3;
       }
     }
 
@@ -134,7 +141,7 @@ bool inode_resize(struct inode_disk* id, block_sector_t id_sector, off_t size) {
     if (buffer[i] != 0 && size <= TOTAL_DIRECT * BLOCK_SECTOR_SIZE) {
       free_map_release(buffer[i], 1);
       buffer[i] = 0;
-    } else {
+    } else if (buffer[i] != 0 && size > TOTAL_DIRECT * BLOCK_SECTOR_SIZE) {
       // Write indirect pointer tree to disk
       cache_write(fs_device, buffer[i], buffer2);
     }
