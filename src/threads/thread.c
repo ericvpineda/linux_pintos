@@ -213,7 +213,7 @@ tid_t thread_create(const char* name, int priority, thread_func* function, void*
     sf->st[i] = init_fpu[i];
   }
   /* End of added fpu code */
-  
+
   sf->eip = switch_entry;
   sf->ebp = 0;
 

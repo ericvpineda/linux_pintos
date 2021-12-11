@@ -108,7 +108,7 @@ void file_allow_write(struct file* file) {
 /* Returns the size of FILE in bytes. */
 off_t file_length(struct file* file) {
   ASSERT(file != NULL);
-  return inode_length(file->inode);
+  return inode_disk_length(file->inode);
 }
 
 /* Sets the current position in FILE to NEW_POS bytes from the

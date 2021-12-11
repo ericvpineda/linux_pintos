@@ -21,16 +21,16 @@ struct lock syscall_lock;
 
 /* Prototype functions */
 static void syscall_handler(struct intr_frame*);
-void syscall_init(void) { 
+void syscall_init(void) {
   lock_init(&syscall_lock);
-  intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall"); 
+  intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 struct file* get_file(uint32_t* fd);
-bool check_valid_location (void *file_name);
-void validate_buffer(void *ptr, size_t size);
-void validate_pointer(void *ptr, size_t size);
-void validate_string(char *string);
+bool check_valid_location(void* file_name);
+void validate_buffer(void* ptr, size_t size);
+void validate_pointer(void* ptr, size_t size);
+void validate_string(char* string);
 
 /* Main syscall handler */
 static void syscall_handler(struct intr_frame* f UNUSED) {
@@ -50,18 +50,18 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Create -- syscall */
   if (args[0] == SYS_CREATE) {
     lock_acquire(&syscall_lock);
-    char *file_name = (char *)args[1];
+    char* file_name = (char*)args[1];
     size_t file_size = (size_t)args[2];
 
     /* Check each byte located in valid vaddr and pagedir */
-    if (!check_valid_location((void *)file_name)) {
+    if (!check_valid_location((void*)file_name)) {
       f->eax = 0;
       thread_current()->pcb->wait_status->exit_code = -1;
       lock_release(&syscall_lock);
       return process_exit();
     }
 
-    /* Check NULL, empty string file_name, file_name already exists */    
+    /* Check NULL, empty string file_name, file_name already exists */
     if (!filesys_create(file_name, file_size)) {
       f->eax = 0;
     } else {
@@ -70,10 +70,10 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     lock_release(&syscall_lock);
   }
 
-  /* Filesize -- Syscall */ 
+  /* Filesize -- Syscall */
   if (args[0] == SYS_FILESIZE) {
     lock_acquire(&syscall_lock);
-    struct file *open_file_table = get_file(args);
+    struct file* open_file_table = get_file(args);
     if (open_file_table) {
       f->eax = file_length(open_file_table);
     }
@@ -86,9 +86,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     struct process* pcb = thread_current()->pcb;
     int fd = args[1];
     int fd_index = pcb->fd_index;
-    
-    if (fd >= 3 && fd < fd_index && check_valid_location((void *) &fd)) {
-      struct file *open_file_table = get_file(args);
+
+    if (fd >= 3 && fd < fd_index && check_valid_location((void*)&fd)) {
+      struct file* open_file_table = get_file(args);
       file_close(open_file_table);
       list_remove(&open_file_table->elem);
     }
@@ -98,7 +98,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Tell -- syscall */
   if (args[0] == SYS_TELL) {
     lock_acquire(&syscall_lock);
-    struct file *open_file_table = get_file(args);
+    struct file* open_file_table = get_file(args);
     if (open_file_table) {
       off_t curr_byte_pos = file_tell(open_file_table);
       f->eax = curr_byte_pos;
@@ -109,9 +109,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Seek -- syscall */
   if (args[0] == SYS_SEEK) {
     lock_acquire(&syscall_lock);
-    struct file *open_file_table = get_file(args);
+    struct file* open_file_table = get_file(args);
     if (open_file_table) {
-      file_seek(open_file_table, (off_t) args[2]);
+      file_seek(open_file_table, (off_t)args[2]);
     }
     lock_release(&syscall_lock);
   }
@@ -119,7 +119,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Remove -- syscall */
   if (args[0] == SYS_REMOVE) {
     lock_acquire(&syscall_lock);
-    char *file_name = (char *) args[1];
+    char* file_name = (char*)args[1];
     bool res = filesys_remove(file_name);
     f->eax = !res ? 0 : 1;
     lock_release(&syscall_lock);
@@ -128,11 +128,11 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Open -- syscall */
   if (args[0] == SYS_OPEN) {
     lock_acquire(&syscall_lock);
-    char *file_name = (char *) args[1];
+    char* file_name = (char*)args[1];
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
 
-    if (!check_valid_location((void *)file_name) || !file_name) {
+    if (!check_valid_location((void*)file_name) || !file_name) {
       f->eax = 0;
       thread_current()->pcb->wait_status->exit_code = -1;
       lock_release(&syscall_lock);
@@ -153,12 +153,11 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       return;
     }
 
-
     /* Else, add open_file to FDT */
     open_file->name = file_name;
     open_file->id = fd_index;
     list_push_front(&pcb->fdt, &open_file->elem);
-    
+
     /* Return fd to user process */
     f->eax = fd_index;
     pcb->fd_index++;
@@ -180,12 +179,12 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     lock_acquire(&syscall_lock);
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
-    int fd = (int) args[1];
-    char *buffer = (char *) args[2];
-    size_t size = (size_t) args[3];
+    int fd = (int)args[1];
+    char* buffer = (char*)args[2];
+    size_t size = (size_t)args[3];
 
     /* Check buffer correct location & buffer valid fd */
-    if (fd == 1 || fd < 0 || fd >= fd_index || !check_valid_location((void *)buffer)) {
+    if (fd == 1 || fd < 0 || fd >= fd_index || !check_valid_location((void*)buffer)) {
       f->eax = -1;
       thread_current()->pcb->wait_status->exit_code = -1;
       lock_release(&syscall_lock);
@@ -207,7 +206,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
 
     /* Else read from open file table */
-    struct file *file_name = get_file(args);
+    struct file* file_name = get_file(args);
     if (file_name) {
       size_t bytes_read = 0;
       size_t total = 0;
@@ -225,14 +224,14 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Write -- syscall */
   if (args[0] == SYS_WRITE) {
     lock_acquire(&syscall_lock);
-    int fd = (int) args[1];
-    char *buffer = (char *) args[2];
-    off_t size = (off_t) args[3];
+    int fd = (int)args[1];
+    char* buffer = (char*)args[2];
+    off_t size = (off_t)args[3];
     struct process* pcb = thread_current()->pcb;
     int fd_index = pcb->fd_index;
 
     /* Check invalid fd and vaddr/page locations */
-    if (fd <= 0 || fd >= fd_index || !check_valid_location((void *) buffer)) {
+    if (fd <= 0 || fd >= fd_index || !check_valid_location((void*)buffer)) {
       f->eax = -1;
       thread_current()->pcb->wait_status->exit_code = -1;
       lock_release(&syscall_lock);
@@ -241,14 +240,14 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
     /* Check if fd is stdout */
     if (fd == 1) {
-      putbuf((char*) args[2], args[3]);
+      putbuf((char*)args[2], args[3]);
       f->eax = args[3];
       lock_release(&syscall_lock);
       return;
     }
-    
+
     /* Else read from fdt */
-    struct file *file_name = get_file(args);
+    struct file* file_name = get_file(args);
     if (file_name) {
       off_t bytes_read = 0;
       off_t total = 0;
@@ -273,9 +272,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* compute E -- syscall */
   if (args[0] == SYS_COMPUTE_E) {
     lock_acquire(&syscall_lock);
-    int e_value = (int) args[1];
+    int e_value = (int)args[1];
     int res = sys_sum_to_e(e_value);
-    f->eax = res; 
+    f->eax = res;
     lock_release(&syscall_lock);
   }
 
@@ -286,13 +285,20 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
   /* Exec -- syscall */
   else if (args[0] == SYS_EXEC) {
-    validate_string((char*) args[1]);
-    f->eax = process_execute((char*) args[1]);
+    validate_string((char*)args[1]);
+    f->eax = process_execute((char*)args[1]);
   }
-  
+
   /* Wait -- syscall */
   else if (args[0] == SYS_WAIT) {
     f->eax = process_wait(args[1]);
+  }
+
+  /* Inumber -- syscall */
+  else if (args[0] == SYS_INUMBER) {
+    struct file* file_name = get_file(args);
+    int inum = (int)inode_get_inumber(file_name->inode);
+    f->eax = inum;
   }
 }
 
@@ -300,9 +306,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
 /* Get file associated with fd */
 struct file* get_file(uint32_t* args) {
-  int fd = (int) args[1];
+  int fd = (int)args[1];
   struct process* pcb = thread_current()->pcb;
-  int unused_fd = (int) pcb->fd_index;
+  int unused_fd = (int)pcb->fd_index;
   if (fd < unused_fd || fd >= 0) {
     struct list_elem* e;
     for (e = list_begin(&pcb->fdt); e != list_end(&pcb->fdt); e = list_next(e)) {
@@ -316,17 +322,16 @@ struct file* get_file(uint32_t* args) {
 }
 
 /* Check file_name valid location in vaddr && pagedir */
-bool check_valid_location (void *file_name) {
+bool check_valid_location(void* file_name) {
   struct process* pcb = thread_current()->pcb;
   if (!is_user_vaddr(file_name) || !pagedir_get_page(pcb->pagedir, file_name)) {
-    return 0; 
+    return 0;
   }
   return 1;
 }
 
-
 /* Validates ptr by exiting with code -1 if ptr is an invalid memory addr or invalid pointer */
-void validate_pointer(void *ptr, size_t size) {
+void validate_pointer(void* ptr, size_t size) {
   if (!check_valid_location(ptr) || !check_valid_location(ptr + size)) {
     thread_current()->pcb->wait_status->exit_code = -1;
     return process_exit();
@@ -334,9 +339,9 @@ void validate_pointer(void *ptr, size_t size) {
 }
 
 /* Validates string by exiting with code -1 if string maps to invalid pg or its contents are not in user space */
-void validate_string(char *string) {
+void validate_string(char* string) {
   if (is_user_vaddr(string)) {
-    char *pg = pagedir_get_page(thread_current()->pcb->pagedir, string);
+    char* pg = pagedir_get_page(thread_current()->pcb->pagedir, string);
     if (pg == NULL || !check_valid_location(string + strlen(pg) + 1)) {
       thread_current()->pcb->wait_status->exit_code = -1;
       return process_exit();

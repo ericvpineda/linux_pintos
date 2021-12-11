@@ -60,7 +60,7 @@ pid_t process_execute(const char* file_name) {
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page(0);
   strlcpy(fn_copy, file_name, PGSIZE);
-  
+
   if (fn_copy == NULL)
     return TID_ERROR;
 
@@ -70,8 +70,8 @@ pid_t process_execute(const char* file_name) {
   sema_init(&load_data.load_sema, 0);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create(fn_copy, PRI_DEFAULT, start_process, (void*) &load_data);
-  
+  tid = thread_create(fn_copy, PRI_DEFAULT, start_process, (void*)&load_data);
+
   if (tid == TID_ERROR) {
     palloc_free_page(fn_copy);
   } else {
@@ -90,12 +90,12 @@ pid_t process_execute(const char* file_name) {
 
 /* A thread function that loads a user process and starts it running. */
 static void start_process(void* file_name_) {
-  struct load_data *load_data = (struct load_data *) file_name_;
-  char* file_name = (char*) load_data->file_name;
+  struct load_data* load_data = (struct load_data*)file_name_;
+  char* file_name = (char*)load_data->file_name;
   struct thread* t = thread_current();
   struct intr_frame if_;
   bool success, pcb_success;
-  
+
   /* Allocate process control block */
   struct process* new_pcb = malloc(sizeof(struct process));
 
@@ -118,18 +118,20 @@ static void start_process(void* file_name_) {
   /* Iterate through filename copy to get argc */
   char *token_copy, *save_ptr_copy;
   int argc = 0;
-  for (token_copy = strtok_r(file_copy, " ", &save_ptr_copy); token_copy != NULL; token_copy = strtok_r (NULL, " ", &save_ptr_copy)) {
+  for (token_copy = strtok_r(file_copy, " ", &save_ptr_copy); token_copy != NULL;
+       token_copy = strtok_r(NULL, " ", &save_ptr_copy)) {
     argc++;
   }
 
   char *token, *save_ptr;
-  char *token_list[argc];
+  char* token_list[argc];
   int i = argc - 1;
   int tokens_start;
-  
+
   /* Iterate through filename to extract tokens into token_list */
-  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
-    token_list[i] = (char*) malloc(strlen(token) + 1);
+  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
+       token = strtok_r(NULL, " ", &save_ptr)) {
+    token_list[i] = (char*)malloc(strlen(token) + 1);
     strlcpy(token_list[i], token, strlen(token) + 1);
     tokens_start = i;
     i--;
@@ -197,7 +199,7 @@ static void start_process(void* file_name_) {
     }
 
     /* Stack align the ESP */
-    uintptr_t align = (uintptr_t) if_.esp - (4 * argc) - 16;
+    uintptr_t align = (uintptr_t)if_.esp - (4 * argc) - 16;
     while (align % 16 != 12) {
       if_.esp--;
       memset(if_.esp, 0, 1);
@@ -230,8 +232,8 @@ static void start_process(void* file_name_) {
 
     /* Store a fake return address onto the stack */
     int fake_return = 0;
-    if_.esp -= sizeof(void(*)(void));
-    memcpy(if_.esp, &fake_return, sizeof(void(*)(void)));
+    if_.esp -= sizeof(void (*)(void));
+    memcpy(if_.esp, &fake_return, sizeof(void (*)(void)));
 
     /* Initialize shared data struct for this process and its parent
        contingent upon successful load. */
@@ -246,10 +248,10 @@ static void start_process(void* file_name_) {
     t->pcb->wait_status->tid = t->tid;
     t->pcb->wait_status->already_waited = false;
     sema_init(&t->pcb->wait_status->sema, 0);
-    lock_init(&t->pcb->wait_status->refs_lock);   
+    lock_init(&t->pcb->wait_status->refs_lock);
     sema_up(&load_data->load_sema);
   }
-  
+
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -270,14 +272,14 @@ static void start_process(void* file_name_) {
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int process_wait(pid_t child_pid) {
-  struct thread *t = thread_current();
-  struct list *thread_children = &t->pcb->children;
+  struct thread* t = thread_current();
+  struct list* thread_children = &t->pcb->children;
 
   /* Search this thread's children for CHILD_PID and set child accordingly
      if found, or otherwise NULL. */
-  struct wait_status *child = NULL;
-  struct wait_status *curr_child;
-  struct list_elem *e;
+  struct wait_status* child = NULL;
+  struct wait_status* curr_child;
+  struct list_elem* e;
   for (e = list_begin(thread_children); e != list_end(thread_children); e = list_next(e)) {
     curr_child = list_entry(e, struct wait_status, elem);
     if (curr_child->tid == child_pid) {
@@ -290,7 +292,7 @@ int process_wait(pid_t child_pid) {
   if (child == NULL || child->already_waited) {
     return -1;
   }
-  
+
   /* Prevent waiting on a process multiple times. */
   child->already_waited = true;
 
@@ -309,7 +311,7 @@ int process_wait(pid_t child_pid) {
 /* Free the current process's resources. */
 void process_exit(void) {
   struct thread* cur = thread_current();
-  struct process *pcb = cur->pcb;
+  struct process* pcb = cur->pcb;
   uint32_t* pd;
 
   /* If this thread does not have a PCB, don't worry */
@@ -317,7 +319,7 @@ void process_exit(void) {
     thread_exit();
     NOT_REACHED();
   }
-  
+
   /* Close all files in the file descriptor table */
   while (!list_empty(&pcb->fdt)) {
     struct file* tmp = list_entry(list_pop_front(&pcb->fdt), struct file, elem);
@@ -361,8 +363,8 @@ void process_exit(void) {
 
   /* Decrement ref_counts of all children processes, freeing/removing
      them from the children list if their ref count hits 0. */
-  struct wait_status *child = NULL;
-  struct list_elem *e;
+  struct wait_status* child = NULL;
+  struct list_elem* e;
   for (e = list_begin(&pcb->children); e != list_end(&pcb->children); e = list_next(e)) {
     child = list_entry(e, struct wait_status, elem);
     lock_acquire(&child->refs_lock);
@@ -373,7 +375,6 @@ void process_exit(void) {
       free(child);
     }
   }
-
 
   /* Free the PCB of this process and kill this thread
     Avoid race where PCB is freed before t->pcb is set to NULL
@@ -495,7 +496,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 
   /* Assign process running file */
   t->pcb->running_file = file;
-  
+
   /* Prevent running file from being written to */
   file_deny_write(file);
 

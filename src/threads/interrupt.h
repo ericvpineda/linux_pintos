@@ -19,14 +19,14 @@ enum intr_level intr_disable(void);
 struct intr_frame {
   /* Pushed by intr_entry in intr-stubs.S.
        These are the interrupted task's saved registers. */
-  int8_t st[108];        
-  // uint32_t st1;  
-  // uint32_t st2; 
-  // uint32_t st3;        
-  // uint32_t st4;  
-  // uint32_t st5; 
-  // uint32_t st6;        
-  // uint32_t st7; 
+  int8_t st[108];
+  // uint32_t st1;
+  // uint32_t st2;
+  // uint32_t st3;
+  // uint32_t st4;
+  // uint32_t st5;
+  // uint32_t st6;
+  // uint32_t st7;
   uint32_t edi;       /* Saved EDI. */
   uint32_t esi;       /* Saved ESI. */
   uint32_t ebp;       /* Saved EBP. */

@@ -4,14 +4,14 @@
 #ifndef __ASSEMBLER__
 /* switch_thread()'s stack frame. */
 struct switch_threads_frame {
-  int8_t st[108];        
-  // uint32_t st1;  
-  // uint32_t st2; 
-  // uint32_t st3;        
-  // uint32_t st4;  
-  // uint32_t st5; 
-  // uint32_t st6;        
-  // uint32_t st7;  
+  int8_t st[108];
+  // uint32_t st1;
+  // uint32_t st2;
+  // uint32_t st3;
+  // uint32_t st4;
+  // uint32_t st5;
+  // uint32_t st6;
+  // uint32_t st7;
   //uint32_t esp;
   uint32_t edi;        /* 32: Saved %edi. */
   uint32_t esi;        /* 36: Saved %esi. */
