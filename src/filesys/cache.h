@@ -1,4 +1,5 @@
 #include "devices/block.h"
+#include "filesys/off_t.h"
 
 struct cache_item {
   int valid;     // keeps track of whether the item/entry is valid, 0 if invalid, 1 if valid
@@ -11,6 +12,10 @@ struct cache_item {
 
 void cache_init(void);
 void cache_write(struct block* block, block_sector_t sector, void* buffer);
+void cache_write_at(struct block* block, block_sector_t sector, void* buffer, off_t size,
+                    off_t offset);
 void cache_read(struct block* block, block_sector_t sector, void* buffer);
+void cache_read_at(struct block* block, block_sector_t sector, void* buffer, off_t size,
+                   off_t offset);
 void cache_flush(void);
-void clock_evict(struct block*, block_sector_t, void*, int);
+void clock_evict(struct block*, block_sector_t, void*, int, off_t, off_t);
