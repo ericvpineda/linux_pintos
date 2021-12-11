@@ -17,8 +17,6 @@
 #include "devices/input.h"
 #include <float.h>
 
-#include "filesys/directory.h"
-
 struct lock syscall_lock;
 
 /* Prototype functions */
@@ -28,7 +26,7 @@ void syscall_init(void) {
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-struct file_dir* get_file_wrapper(uint32_t* fd);
+struct file* get_file(uint32_t* fd);
 bool check_valid_location(void* file_name);
 void validate_buffer(void* ptr, size_t size);
 void validate_pointer(void* ptr, size_t size);
@@ -64,7 +62,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
 
     /* Check NULL, empty string file_name, file_name already exists */
-    if (!filesys_create(file_name, file_size, 0)) {
+    if (!filesys_create(file_name, file_size)) {
       f->eax = 0;
     } else {
       f->eax = 1;
@@ -75,8 +73,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Filesize -- Syscall */
   if (args[0] == SYS_FILESIZE) {
     lock_acquire(&syscall_lock);
-    struct file_dir* open_file_wrapper = get_file_wrapper(args);
-    struct file* open_file_table = open_file_wrapper->file;
+    struct file* open_file_table = get_file(args);
     if (open_file_table) {
       f->eax = file_length(open_file_table);
     }
@@ -91,15 +88,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     int fd_index = pcb->fd_index;
 
     if (fd >= 3 && fd < fd_index && check_valid_location((void*)&fd)) {
-      struct file_dir* open_file_wrapper = get_file_wrapper(args);
-      if (open_file_wrapper->isdir) {
-        struct dir* open_dir_table = open_file_wrapper->dir;
-        dir_close(open_dir_table);
-      } else {
-        struct file* open_file_table = open_file_wrapper->file;
-        file_close(open_file_table);
-      }
-      list_remove(&open_file_wrapper->elem);
+      struct file* open_file_table = get_file(args);
+      file_close(open_file_table);
+      list_remove(&open_file_table->elem);
     }
     lock_release(&syscall_lock);
   }
@@ -107,8 +98,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Tell -- syscall */
   if (args[0] == SYS_TELL) {
     lock_acquire(&syscall_lock);
-    struct file_dir* open_file_wrapper = get_file_wrapper(args);
-    struct file* open_file_table = open_file_wrapper->file;
+    struct file* open_file_table = get_file(args);
     if (open_file_table) {
       off_t curr_byte_pos = file_tell(open_file_table);
       f->eax = curr_byte_pos;
@@ -119,8 +109,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
   /* Seek -- syscall */
   if (args[0] == SYS_SEEK) {
     lock_acquire(&syscall_lock);
-    struct file_dir* open_file_wrapper = get_file_wrapper(args);
-    struct file* open_file_table = open_file_wrapper->file;
+    struct file* open_file_table = get_file(args);
     if (open_file_table) {
       file_seek(open_file_table, (off_t)args[2]);
     }
@@ -154,33 +143,20 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
       return;
     }
 
-    // potential bugs bc filesys_open_dir always returns a dir
     struct file* open_file = filesys_open(file_name);
-    struct dir* open_dir = filesys_open_dir(file_name);
 
     /* If no open file for file_name exists, return error code */
-    if (!open_file && !open_dir) {
+    if (!open_file) {
       f->eax = -1;
       thread_current()->pcb->wait_status->exit_code = 0;
       lock_release(&syscall_lock);
       return;
     }
 
-    // initialize fd wrapper for file
-    struct file_dir* file_dir = malloc(sizeof(struct file_dir));
-    file_dir->file = open_file;
-    file_dir->dir = open_dir;
-    // need to change this to accommodate for absolute and relative paths
-    file_dir->name = file_name;
-    file_dir->id = fd_index;
-    if (open_file == NULL) {
-      file_dir->isdir = true;
-    } else {
-      file_dir->isdir = false;
-    }
-
     /* Else, add open_file to FDT */
-    list_push_front(&pcb->fdt, &file_dir->elem);
+    open_file->name = file_name;
+    open_file->id = fd_index;
+    list_push_front(&pcb->fdt, &open_file->elem);
 
     /* Return fd to user process */
     f->eax = fd_index;
@@ -230,15 +206,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
 
     /* Else read from open file table */
-    struct file_dir* file_wrapper = get_file_wrapper(args);
-
-    // disallow reads on directories
-    if (file_wrapper->isdir) {
-      f->eax = -1;
-      lock_release(&syscall_lock);
-      return;
-    }
-    struct file* file_name = file_wrapper->file;
+    struct file* file_name = get_file(args);
     if (file_name) {
       size_t bytes_read = 0;
       size_t total = 0;
@@ -279,15 +247,7 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     }
 
     /* Else read from fdt */
-    struct file_dir* file_wrapper = get_file_wrapper(args);
-
-    // disallow writes on directories
-    if (file_wrapper->isdir) {
-      f->eax = -1;
-      lock_release(&syscall_lock);
-      return;
-    }
-    struct file* file_name = file_wrapper->file;
+    struct file* file_name = get_file(args);
     if (file_name) {
       off_t bytes_read = 0;
       off_t total = 0;
@@ -334,68 +294,25 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     f->eax = process_wait(args[1]);
   }
 
-  /* Change Directory (chdir) syscall */
-  else if (args[0] == SYS_CHDIR) {
-    lock_acquire(&syscall_lock);
-    f->eax = filesys_chdir((char*)args[1]);
-    lock_release(&syscall_lock);
-  }
-
-  /* Make Directory (mkdir) syscall */
-  else if (args[0] == SYS_MKDIR) {
-    lock_acquire(&syscall_lock);
-    f->eax = filesys_create((char*)args[1], 0, 1);
-    lock_release(&syscall_lock);
-  }
-
-  /* Read Directory (readdir) syscall */
-  // Potential BUG: Not sure if . or .. will be returned by dir_readdir
-  else if (args[0] == SYS_READDIR) {
-    lock_acquire(&syscall_lock);
-    struct file_dir* potential_directory = get_file_wrapper(args);
-    if (potential_directory->isdir == false) {
-      f->eax = false;
-      lock_release(&syscall_lock);
-      return;
-    }
-
-    f->eax = dir_readdir(potential_directory->dir, (char*)args[2]);
-    lock_release(&syscall_lock);
-  }
-
-  /* Is Directory (isdir) syscall */
-  else if (args[0] == SYS_ISDIR) {
-    lock_acquire(&syscall_lock);
-    struct file_dir* potential_directory = get_file_wrapper(args);
-    f->eax = potential_directory->isdir;
-    lock_release(&syscall_lock);
-  }
-
-  /* inumber syscall */
+  /* Inumber -- syscall */
   else if (args[0] == SYS_INUMBER) {
-    lock_acquire(&syscall_lock);
-    struct file_dir* file_dir = get_file_wrapper(args);
-    if (file_dir->isdir) {
-      f->eax = inode_get_inumber(file_dir->dir->inode);
-    } else {
-      f->eax = inode_get_inumber(file_dir->file->inode);
-    }
-
-    lock_release(&syscall_lock);
+    struct file* file_name = get_file(args);
+    int inum = (int)inode_get_inumber(file_name->inode);
+    f->eax = inum;
   }
 }
 
 // HELPER METHODS
 
 /* Get file associated with fd */
-struct file_dir* get_file_wrapper(uint32_t* args) {
+struct file* get_file(uint32_t* args) {
   int fd = (int)args[1];
   struct process* pcb = thread_current()->pcb;
   int unused_fd = (int)pcb->fd_index;
   if (fd < unused_fd || fd >= 0) {
     struct list_elem* e;
     for (e = list_begin(&pcb->fdt); e != list_end(&pcb->fdt); e = list_next(e)) {
-      struct file_dir* tmp = list_entry(e, struct file_dir, elem);
+      struct file* tmp = list_entry(e, struct file, elem);
       if (tmp->id == fd) {
         return tmp;
       }

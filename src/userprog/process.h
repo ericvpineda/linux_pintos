@@ -33,11 +33,7 @@ struct process {
   struct file* running_file;  /* ADDED: File process currently running */
   struct list
       children; /* ADDED: List of all children for this thread (elems will be a wait_status struct). */
-  struct wait_status* wait_status; /* ADDED: Shared wait status struct. */
-
-  // project 3 additions
-  struct dir* cwd;    /* ADDED: Current working directory */
-  bool first_process; /* ADDED: Indicates whether or not cwd should be the root dir */
+  struct wait_status* wait_status; /* ADDED: This thread's wait status. */
 };
 
 /* Shared data struct between parent and child so that parent can wait on child thread. */
@@ -57,16 +53,6 @@ struct load_data {
   struct wait_status* wait_status;
   struct semaphore load_sema;
   bool loaded;
-  struct dir* cwd;
-};
-
-struct file_dir {
-  struct file* file;     /* ADDED: pointer to file */
-  struct dir* dir;       /* ADDED: pointer to directory */
-  char* name;            /* ADDED: file name */
-  int id;                /* ADDED: File descriptor index */
-  bool isdir;            /* ADDED: Determines if file or directory */
-  struct list_elem elem; /* ADDED: List elem for FDT */
 };
 
 void userprog_init(void);

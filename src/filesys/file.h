@@ -9,9 +9,12 @@ struct inode;
 
 /* An open file. */
 struct file {
-  struct inode* inode; /* File's inode. */
-  off_t pos;           /* Current position. */
-  bool deny_write;     /* Has file_deny_write() been called? */
+  struct inode* inode;   /* File's inode. */
+  off_t pos;             /* Current position. */
+  bool deny_write;       /* Has file_deny_write() been called? */
+  char* name;            /* ADDED: file name */
+  int id;                /* ADDED: File descriptor index */
+  struct list_elem elem; /* ADDED: List elem for FDT */
 };
 
 /* Opening and closing files. */
