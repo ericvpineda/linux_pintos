@@ -43,6 +43,9 @@ void userprog_init(void) {
   /* Initialize list of children */
   list_init(&t->pcb->children);
 
+  // set flag to indicate if this is the first user process
+  t->pcb->first_process = true;
+
   /* Kill the kernel if we did not succeed */
   ASSERT(success);
 }
@@ -68,6 +71,15 @@ pid_t process_execute(const char* file_name) {
   struct load_data load_data;
   load_data.file_name = fn_copy;
   sema_init(&load_data.load_sema, 0);
+
+  if (t->pcb->first_process) {
+    // if this is the first user process, send down root dir
+    load_data.cwd = dir_open_root();
+    t->pcb->first_process = false;
+  } else {
+    // else, send down cwd
+    load_data.cwd = dir_reopen(t->pcb->cwd);
+  }
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create(fn_copy, PRI_DEFAULT, start_process, (void*)&load_data);
@@ -149,6 +161,9 @@ static void start_process(void* file_name_) {
     // Continue initializing the PCB as normal
     t->pcb->main_thread = t;
     strlcpy(t->pcb->process_name, process_name, sizeof t->name);
+
+    // Set cwd of this user process
+    t->pcb->cwd = load_data->cwd;
   }
 
   /* Initialize interrupt frame and load executable. */
@@ -268,7 +283,6 @@ static void start_process(void* file_name_) {
    child of the calling process, or if process_wait() has already
    been successfully called for the given PID,w returns -1
    immediately, without waiting.
-
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int process_wait(pid_t child_pid) {
@@ -322,13 +336,18 @@ void process_exit(void) {
 
   /* Close all files in the file descriptor table */
   while (!list_empty(&pcb->fdt)) {
-    struct file* tmp = list_entry(list_pop_front(&pcb->fdt), struct file, elem);
+    struct file_dir* file_dir = list_entry(list_pop_front(&pcb->fdt), struct file_dir, elem);
+    struct file* tmp = file_dir->file;
     file_close(tmp);
+    free(file_dir);
   }
 
   /* Close current running executable */
   file_close(pcb->running_file);
   pcb->running_file = NULL;
+
+  /* Close CWD */
+  dir_close(pcb->cwd);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -621,15 +640,11 @@ static bool validate_segment(const struct Elf32_Phdr* phdr, struct file* file) {
 /* Loads a segment starting at offset OFS in FILE at address
    UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
    memory are initialized, as follows:
-
         - READ_BYTES bytes at UPAGE must be read from FILE
           starting at offset OFS.
-
         - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
-
    The pages initialized by this function must be writable by the
    user process if WRITABLE is true, read-only otherwise.
-
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
 static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t read_bytes,
