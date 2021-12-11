@@ -26,7 +26,7 @@ void cache_read_at(struct block* block, block_sector_t sector, void* buffer, off
     return;
   }
   for (int i = 0; i < 64; i++) {
-    if (sector == buffer_cache[i].sector) {
+    if (sector == buffer_cache[i].sector && buffer_cache[i].valid == 1) {
       lock_acquire(&sector_locks[i]);
       buffer_cache[i].clock_bit = 1;
       void* buf = buffer_cache[i].buffer;
@@ -36,7 +36,6 @@ void cache_read_at(struct block* block, block_sector_t sector, void* buffer, off
     }
   }
   clock_evict(fs_device, sector, buffer, 0, size, offset);
-  cache_flush();
 }
 
 void cache_write_at(struct block* block, block_sector_t sector, void* buffer, off_t size,
@@ -47,7 +46,7 @@ void cache_write_at(struct block* block, block_sector_t sector, void* buffer, of
     return;
   }
   for (int i = 0; i < 64; i++) {
-    if (sector == buffer_cache[i].sector) {
+    if (sector == buffer_cache[i].sector && buffer_cache[i].valid == 1) {
       lock_acquire(&sector_locks[i]);
       buffer_cache[i].dirty_bit = 1;
       buffer_cache[i].clock_bit = 1;
@@ -58,7 +57,6 @@ void cache_write_at(struct block* block, block_sector_t sector, void* buffer, of
     }
   }
   clock_evict(fs_device, sector, buffer, 1, size, offset);
-  cache_flush();
 }
 
 void cache_write(struct block* block, block_sector_t sector, void* buffer) {
@@ -88,6 +86,9 @@ void clock_evict(struct block* fs_device, block_sector_t sector, void* buffer, i
     lock_acquire(&sector_locks[clock_index]);
     lock_acquire(&global_cache_lock);
     if (buffer_cache[clock_index].clock_bit == 0) {
+      if (buffer_cache[clock_index].dirty_bit == 1) {
+        block_write(fs_device, buffer_cache[clock_index].sector, buffer_cache[clock_index].buffer);
+      }
       if (write) {
         buffer_cache[clock_index].valid = 1;
         buffer_cache[clock_index].dirty_bit = 1;
