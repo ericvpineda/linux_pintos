@@ -89,9 +89,9 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
     struct process* pcb = thread_current()->pcb;
     int fd = args[1];
     int fd_index = pcb->fd_index;
-
-    if (fd >= 3 && fd < fd_index && check_valid_location((void*)&fd)) {
-      struct file_dir* open_file_wrapper = get_file_wrapper(args);
+    struct file_dir* open_file_wrapper = get_file_wrapper(args);
+    if (open_file_wrapper != NULL && fd >= 3 && fd < fd_index &&
+        check_valid_location((void*)open_file_wrapper->name)) {
       if (open_file_wrapper->isdir) {
         struct dir* open_dir_table = open_file_wrapper->dir;
         dir_close(open_dir_table);

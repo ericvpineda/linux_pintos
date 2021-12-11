@@ -176,7 +176,7 @@ rollback:
    Note: free_map_allocate called on inode_disk in parent function(s)
 */
 bool inode_create(block_sector_t sector, off_t length, int isdir) {
-  struct inode* inode = NULL;
+  // struct inode* inode = NULL;
   struct inode_disk* disk_inode = NULL;
   bool success = false;
 
@@ -189,25 +189,22 @@ bool inode_create(block_sector_t sector, off_t length, int isdir) {
   disk_inode = calloc(1, sizeof *disk_inode);
   if (disk_inode != NULL) {
 
-    /* Allocate memory for inode. */
-    inode = malloc(sizeof *inode);
-    if (inode == NULL) {
-      free(disk_inode);
-      return NULL;
-    }
+    // /* Allocate memory for inode. */
+    // inode = malloc(sizeof *inode);
+    // if (inode == NULL) {
+    //   free(disk_inode);
+    //   return NULL;
+    // }
 
-    /* Initialize inode. */
-    lock_acquire(&open_inodes_lock);
-    list_push_front(&open_inodes, &inode->elem);
-    lock_release(&open_inodes_lock);
-    inode->sector = sector;
-    inode->open_cnt = 1;
-    inode->deny_write_cnt = 0;
-    inode->deny_wait_cnt = 0;
-    inode->removed = false;
-    lock_init(&inode->inode_lock);
-    lock_init(&inode->deny_write_lock);
-    cond_init(&inode->deny_write_cv);
+    // /* Initialize inode. */
+    // inode->sector = sector;
+    // inode->open_cnt = 1;
+    // inode->deny_write_cnt = 0;
+    // inode->deny_wait_cnt = 0;
+    // inode->removed = false;
+    // lock_init(&inode->inode_lock);
+    // lock_init(&inode->deny_write_lock);
+    // cond_init(&inode->deny_write_cv);
 
     // Returns number of sectors to allocate
     disk_inode->length = length;
@@ -220,12 +217,13 @@ bool inode_create(block_sector_t sector, off_t length, int isdir) {
     disk_inode->doubly_indirect = 0;
 
     // Resize inode to length
-    lock_acquire(&inode->inode_lock);
+    // lock_acquire(&inode->inode_lock);
     success = inode_resize(disk_inode, sector, length);
-    lock_release(&inode->inode_lock);
+    // lock_release(&inode->inode_lock);
 
     // Free disk_inode buffer
     free(disk_inode);
+    // inode_close(inode);
   }
   return success;
 }
