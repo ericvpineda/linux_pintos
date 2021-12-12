@@ -95,10 +95,6 @@ bool inode_resize(struct inode_disk* id, block_sector_t id_sector, off_t size) {
     goto complete;
   }
 
-  //for doubly indirect
-  // buffer: stores array of indirect ptrs
-  // buffer2: stores array of direct ptrs for each indirect ptr
-
   /* Doubly indirect pointer */
   if (id->doubly_indirect == 0) {
     // Allocate block for doubly indirect pointer if it doesn't exist and zero out the buffer
@@ -121,6 +117,9 @@ bool inode_resize(struct inode_disk* id, block_sector_t id_sector, off_t size) {
       cache_read(fs_device, buffer[i], buffer2);
     }
 
+    if (buffer[i] == 0)
+      continue;
+
     for (int j = 0; j < NUM_INDIRECT; j++) {
       if (size <= (TOTAL_DIRECT + NUM_INDIRECT + i * NUM_INDIRECT + j) * BLOCK_SECTOR_SIZE &&
           buffer2[j] != 0) {
@@ -129,11 +128,9 @@ bool inode_resize(struct inode_disk* id, block_sector_t id_sector, off_t size) {
       } else if (size > (TOTAL_DIRECT + NUM_INDIRECT + i * NUM_INDIRECT + j) * BLOCK_SECTOR_SIZE &&
                  buffer2[j] == 0) {
         if (!free_map_allocate(1, &buffer2[j])) {
-          int b = 2;
           goto rollback;
         }
         cache_write(fs_device, buffer2[j], zero_block);
-        int a = 3;
       }
     }
 
@@ -196,23 +193,6 @@ bool inode_create(block_sector_t sector, off_t length, int isdir) {
   disk_inode = calloc(1, sizeof *disk_inode);
   if (disk_inode != NULL) {
 
-    // /* Allocate memory for inode. */
-    // inode = malloc(sizeof *inode);
-    // if (inode == NULL) {
-    //   free(disk_inode);
-    //   return NULL;
-    // }
-
-    // /* Initialize inode. */
-    // inode->sector = sector;
-    // inode->open_cnt = 1;
-    // inode->deny_write_cnt = 0;
-    // inode->deny_wait_cnt = 0;
-    // inode->removed = false;
-    // lock_init(&inode->inode_lock);
-    // lock_init(&inode->deny_write_lock);
-    // cond_init(&inode->deny_write_cv);
-
     // Returns number of sectors to allocate
     disk_inode->length = length;
     disk_inode->magic = INODE_MAGIC;
@@ -224,13 +204,10 @@ bool inode_create(block_sector_t sector, off_t length, int isdir) {
     disk_inode->doubly_indirect = 0;
 
     // Resize inode to length
-    // lock_acquire(&inode->inode_lock);
     success = inode_resize(disk_inode, sector, length);
-    // lock_release(&inode->inode_lock);
 
     // Free disk_inode buffer
     free(disk_inode);
-    // inode_close(inode);
   }
   return success;
 }
@@ -384,7 +361,6 @@ block_sector_t inode_byte_to_sector(struct inode_disk* id, off_t pos) {
   if (pos < TOTAL_DIRECT * BLOCK_SECTOR_SIZE) {
     int sector_idx = pos / BLOCK_SECTOR_SIZE;
     return id->direct[sector_idx] != 0 ? id->direct[sector_idx] : (block_sector_t)-1;
-    // return id->direct[sector_idx];
   }
   // Indirect case
   else if (pos < (TOTAL_DIRECT + NUM_INDIRECT) * BLOCK_SECTOR_SIZE) {
@@ -393,7 +369,6 @@ block_sector_t inode_byte_to_sector(struct inode_disk* id, off_t pos) {
     cache_read(fs_device, id->indirect, buffer);
     int sector_idx = (pos - TOTAL_DIRECT * BLOCK_SECTOR_SIZE) / BLOCK_SECTOR_SIZE;
     return buffer[sector_idx] != 0 ? buffer[sector_idx] : (block_sector_t)-1;
-    // return buffer[sector_idx];
   }
   // Doubly indirect case
   else {
@@ -412,7 +387,6 @@ block_sector_t inode_byte_to_sector(struct inode_disk* id, off_t pos) {
         NUM_INDIRECT;
 
     return buffer2[direct_idx] != 0 ? buffer2[direct_idx] : (block_sector_t)-1;
-    // return buffer2[direct_idx];
   }
 }
 
@@ -476,51 +450,12 @@ off_t inode_write_at(struct inode* inode, const void* buffer_, off_t size, off_t
   const uint8_t* buffer = buffer_;
   off_t bytes_written = 0;
 
-  /* Variables 
-    - lock_cv
-    - cv
-    - deny_write_cnt (already have) [waiting]
-    - active_write_cnt [num active threads modifying the file] -- probably don't need??? should be at most 1
-  */
-
-  /* Functions to modify 
-    - inode_write_at
-    - inode_deny_write? 
-  */
-
-  /* Q's to ask Edward:
-    - Go over current synch implementation for use of inode_lock to see if what we have is correct
-    - do we need to synchronize cache_read/cache_writes? (unless sync happens in buffer cache?)
-    - what is deny_write_cnt meant to do? (does it handle synchronization between reads and writes or only concurrent writes?)
-      - if the answer is the latter then how are we supposed to handle synchronization between reads and writes like in 1.4 from the 
-        spec bc gradescope doesn't seem to explicitly mention it
-    - are we supposed to call inode_deny_write/inode_allow_write inside of inode_write_at/inode_read_at?
-    - do we need a CV to synchronize deny_write_cnt, or can use use a per-inode lock instead? (i.e. inode->inode_lock)
-    - CV details:
-      - can we have some general guidance/overall tips on how to approach the cv implementation?
-      - is using a rw_lock feasible: no
-  */
-
-  // lock_acquire(&inode->deny_write_lock);
   if (inode->deny_write_cnt) {
-    // lock_release(&inode->deny_write_lock);
     return 0;
   }
-  // lock_release(&inode->deny_write_lock);
 
   struct inode_disk* id = (struct inode_disk*)malloc(sizeof(struct inode_disk));
   cache_read(fs_device, inode->sector, (void*)id);
-
-  // Need to implement conditional var
-  // lock_acquire(&inode->deny_write_lock);
-
-  // while (inode->deny_write_cnt > 0) {
-  //   inode->deny_wait_cnt++;
-  //   cond_wait(&inode->deny_write_cv, &inode->deny_write_lock);
-  //   inode->deny_wait_cnt--;
-  // }
-
-  // lock_release(&inode->deny_write_lock);
 
   /* Extend the file if the offset is greater than the current inode_disk length */
   if (offset + size > id->length) {
@@ -571,45 +506,20 @@ off_t inode_write_at(struct inode* inode, const void* buffer_, off_t size, off_t
   return bytes_written;
 }
 
-// TODO: something about a CV for inode_deny_write and inode_allow_write
 /* Disables writes to INODE.
    May be called at most once per inode opener. */
 void inode_deny_write(struct inode* inode) {
-  // TODO: change to CV so that writes get priority over inode_deny_write()
-  // lock_acquire(&inode->deny_write_lock);
   inode->deny_write_cnt++;
   ASSERT(inode->deny_write_cnt <= inode->open_cnt);
-  // lock_release(&inode->deny_write_lock);
-
-  // lock_acquire(&inode->deny_write_lock);
-  // while (inode->deny_write_cnt > 0) {
-  //   inode->deny_wait_cnt++;
-  //   cond_wait(&inode->deny_write_cv, &inode->deny_write_lock);
-  //   inode->deny_wait_cnt--;
-  // }
-  // inode->deny_write_cnt++;
-  // ASSERT(inode->deny_write_cnt <= inode->open_cnt);
-  // lock_release(&inode->deny_write_lock);
 }
 
 /* Re-enables writes to INODE.
    Must be called once by each inode opener who has called
    inode_deny_write() on the inode, before closing the inode. */
 void inode_allow_write(struct inode* inode) {
-  // lock_acquire(&inode->deny_write_lock);
-  // ASSERT(inode->deny_write_cnt > 0);
-  // ASSERT(inode->deny_write_cnt <= inode->open_cnt);
-  // inode->deny_write_cnt--;
-
-  // if (inode->deny_write_cnt == 0)
-  //   cond_signal(&inode->deny_write_cv, &inode->deny_write_lock);
-  // lock_release(&inode->deny_write_lock);
-
-  // lock_acquire(&inode->deny_write_lock);
   ASSERT(inode->deny_write_cnt > 0);
   ASSERT(inode->deny_write_cnt <= inode->open_cnt);
   inode->deny_write_cnt--;
-  // lock_acquire(&inode->deny_write_lock);
 }
 
 /* Returns the length, in bytes, of INODE_DISK's data. */

@@ -45,15 +45,6 @@ void cache_write_at(struct block* block, block_sector_t sector, void* buffer, of
     block_write(block, sector, buffer);
     return;
   }
-  if (size == BLOCK_SECTOR_SIZE && offset == 0) {
-    for (int i = 0; i < 100; i++) {
-      if (((int*)buffer)[i] != 0) {
-        goto temp;
-      }
-    }
-    int a = 3;
-  }
-temp:
   for (int i = 0; i < 64; i++) {
     if (sector == buffer_cache[i].sector && buffer_cache[i].valid == 1) {
       lock_acquire(&sector_locks[i]);

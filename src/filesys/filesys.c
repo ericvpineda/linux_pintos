@@ -140,10 +140,6 @@ struct dir* filesys_open_dir(const char* name) {
     return NULL;
   }
 
-  // alternate solution: not sure if we still have a bug since we always return a dir
-  // dir_close(dir);
-  // return dir_open(inode);
-
   return dir;
 }
 
@@ -183,7 +179,7 @@ bool filesys_remove(const char* name) {
 
         // remove dir from parent dir
         bool success = dir_remove(parent_dir, name_part);
-        dir_close(parent_dir); // not sure about closing this
+        dir_close(parent_dir);
         free(curr_id);
         return success;
       }
@@ -197,7 +193,7 @@ bool filesys_remove(const char* name) {
       free(parent_id);
 
       bool success = dir_remove(parent_dir, name_part);
-      dir_close(parent_dir); // not sure about closing this
+      dir_close(parent_dir);
       return success;
     }
   }
@@ -318,8 +314,6 @@ struct inode* check_path(const char* path, int want_parent, char desired_name[NA
       dir = dir_open_root();
     } else {
       dir = dir_open(inode_open(cwd->inode->sector));
-      //dir = dir_open(cwd->inode); // might have to create copy of cwd another way
-      // dir = dir_reopen(t->pcb->cwd);
     }
   }
 
