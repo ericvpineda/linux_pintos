@@ -85,7 +85,7 @@ bool inode_resize(struct inode_disk* id, block_sector_t id_sector, off_t size) {
     // Free indirect pointer if it is allocated and not needed
     free_map_release(id->indirect, 1);
     id->indirect = 0;
-  } else {
+  } else if (id->indirect != 0 && size > TOTAL_DIRECT * BLOCK_SECTOR_SIZE) {
     // Write indirect pointer tree to disk
     cache_write(fs_device, id->indirect, buffer);
   }
@@ -407,7 +407,9 @@ block_sector_t inode_byte_to_sector(struct inode_disk* id, off_t pos) {
       return -1;
     block_sector_t buffer2[NUM_INDIRECT];
     cache_read(fs_device, buffer[indirect_idx], buffer2);
-    int direct_idx = (pos - (TOTAL_DIRECT + NUM_INDIRECT) * BLOCK_SECTOR_SIZE) / BLOCK_SECTOR_SIZE;
+    int direct_idx =
+        ((pos - (TOTAL_DIRECT + NUM_INDIRECT) * BLOCK_SECTOR_SIZE) / BLOCK_SECTOR_SIZE) %
+        NUM_INDIRECT;
 
     return buffer2[direct_idx] != 0 ? buffer2[direct_idx] : (block_sector_t)-1;
     // return buffer2[direct_idx];
